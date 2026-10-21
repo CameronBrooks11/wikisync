@@ -7,12 +7,18 @@ Records which pages were pulled and the revision each came from, so that a later
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 MANIFEST_DIR = ".wikisync"
 MANIFEST_FILE = "manifest.json"
+
+
+def content_hash(text: str) -> str:
+    """Stable content hash of wikitext, used to detect local edits since a pull."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -24,6 +30,7 @@ class Entry:
     revid: int
     host: str
     path: str
+    sha256: str = ""  # hash of the pulled wikitext; empty for pre-hash manifests
 
 
 @dataclass

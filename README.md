@@ -5,8 +5,7 @@ your own machine: pull pages as local wikitext, edit them with the tools you
 already use (IDE, grep, LLMs, cross-page search, offline), review a diff, then
 push the changes back under your account. Like git, but for wikis.
 
-> **Status: early scaffold.** The CLI exposes its intended shape (`pull`,
-> `status`, `push`) but the commands are not implemented yet.
+> **Status: early.** `pull` and `status` work; `push` is not implemented yet.
 
 ## Why
 
@@ -29,15 +28,20 @@ just setup      # or: uv sync
 ## Usage
 
 ```sh
-just run -- --version
-uv run wikisync --help
+# Fetch pages to local .wiki files (default wiki: appropedia.org)
+uv run wikisync pull "Welcome to Appropedia" --dir ./pages
+
+# Edit the .wiki files with any tools, then see what changed since the pull
+uv run wikisync status --dir ./pages
+# -> modified  Welcome to Appropedia (Welcome_to_Appropedia.wiki)
 ```
 
-Planned workflow (not yet implemented):
+`status` is local only — it compares each file against the revision recorded at
+pull time (in `.wikisync/manifest.json`) and never contacts the wiki.
+
+Not implemented yet:
 
 ```sh
-wikisync pull <page|category>   # fetch pages to local wikitext files
-wikisync status                 # show local edits vs. the fetched revisions
 wikisync push                   # publish edits as your authenticated account
 ```
 
