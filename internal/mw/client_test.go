@@ -64,16 +64,16 @@ func TestLoginAndEdit(t *testing.T) {
 		if action == "" {
 			action = r.URL.Query().Get("action")
 		}
-		switch {
-		case action == "query": // meta=tokens
+		switch action {
+		case "query": // meta=tokens
 			typ := r.URL.Query().Get("type")
 			_, _ = io.WriteString(w, `{"query":{"tokens":{"`+typ+`token":"TOK-`+typ+`"}}}`)
-		case action == "login":
+		case "login":
 			if r.FormValue("lgtoken") != "TOK-login" {
 				t.Errorf("login token = %q", r.FormValue("lgtoken"))
 			}
 			_, _ = io.WriteString(w, `{"login":{"result":"Success"}}`)
-		case action == "edit":
+		case "edit":
 			gotText = r.FormValue("text")
 			gotSummary = r.FormValue("summary")
 			gotBaseRevID = r.FormValue("baserevid")
