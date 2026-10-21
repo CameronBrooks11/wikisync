@@ -71,7 +71,7 @@ func FetchPage(client *http.Client, apiURL, userAgent, title string) (FetchedPag
 	if err != nil {
 		return FetchedPage{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return FetchedPage{}, fmt.Errorf("mediawiki api: %s", resp.Status)
 	}
