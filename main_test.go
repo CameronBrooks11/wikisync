@@ -30,10 +30,11 @@ func TestRun(t *testing.T) {
 		{"no args prints usage", []string{}, 0},
 		{"version", []string{"--version"}, 0},
 		{"unknown command", []string{"bogus"}, 2},
-		{"push stub", []string{"push"}, 2},
 		{"pull needs a title", []string{"pull"}, 2},
 		{"status on empty dir", []string{"status", "--dir", t.TempDir()}, 0},
 		{"diff on empty dir", []string{"diff", "--dir", t.TempDir()}, 0},
+		{"push preview, nothing to push", []string{"push", "--dir", t.TempDir()}, 0},
+		{"push apply needs summary", []string{"push", "--apply", "--dir", t.TempDir()}, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -7,6 +7,10 @@ import (
 	"testing"
 )
 
+func testClient(srv *httptest.Server) *Client {
+	return &Client{HTTP: srv.Client(), APIURL: srv.URL, UserAgent: "ua"}
+}
+
 func TestFetchPageReadsRevisionAndPageID(t *testing.T) {
 	const body = `{"query":{"pages":[{"pageid":5,"title":"Water Pump",` +
 		`"revisions":[{"revid":99,"slots":{"main":{"content":"hello\n"}}}]}]}}`
@@ -22,7 +26,7 @@ func TestFetchPageReadsRevisionAndPageID(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := FetchPage(srv.Client(), srv.URL, "ua", "Water Pump")
+	got, err := testClient(srv).FetchPage("Water Pump")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,11 +44,76 @@ func TestFetchPageMissing(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := FetchPage(srv.Client(), srv.URL, "ua", "Ghost")
+	got, err := testClient(srv).FetchPage("Ghost")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Exists || got.RevID != 0 || got.PageID != 0 || got.Text != "" {
 		t.Errorf("FetchPage = %+v, want missing", got)
+	}
+}
+
+// fakeWiki routes the login/token/edit calls a push makes, recording the last
+// edit it saw.
+func TestLoginAndEdit(t *testing.T) {
+	var gotText, gotSummary, gotBaseRevID, gotToken string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		action := r.FormValue("action")
+		if action == "" {
+			action = r.URL.Query().Get("action")
+		}
+		switch action {
+		case "query": // meta=tokens
+			typ := r.URL.Query().Get("type")
+			_, _ = io.WriteString(w, `{"query":{"tokens":{"`+typ+`token":"TOK-`+typ+`"}}}`)
+		case "login":
+			if r.FormValue("lgtoken") != "TOK-login" {
+				t.Errorf("login token = %q", r.FormValue("lgtoken"))
+			}
+			_, _ = io.WriteString(w, `{"login":{"result":"Success"}}`)
+		case "edit":
+			gotText = r.FormValue("text")
+			gotSummary = r.FormValue("summary")
+			gotBaseRevID = r.FormValue("baserevid")
+			gotToken = r.FormValue("token")
+			_, _ = io.WriteString(w, `{"edit":{"result":"Success","newrevid":1234}}`)
+		default:
+			t.Errorf("unexpected action %q", action)
+		}
+	}))
+	defer srv.Close()
+
+	c := testClient(srv)
+	if err := c.Login("bot", "pw"); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	newRev, err := c.Edit("Water Pump", "new text\n", "tidy", 99)
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if newRev != 1234 {
+		t.Errorf("newRev = %d, want 1234", newRev)
+	}
+	if gotText != "new text\n" || gotSummary != "tidy" || gotBaseRevID != "99" || gotToken != "TOK-csrf" {
+		t.Errorf("edit params: text=%q summary=%q baserevid=%q token=%q", gotText, gotSummary, gotBaseRevID, gotToken)
+	}
+}
+
+func TestEditReportsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.URL.Query().Get("action") == "query" {
+			_, _ = io.WriteString(w, `{"query":{"tokens":{"csrftoken":"T"}}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"error":{"code":"editconflict","info":"Edit conflict"}}`)
+	}))
+	defer srv.Close()
+
+	_, err := testClient(srv).Edit("A", "x", "s", 1)
+	if err == nil {
+		t.Fatal("want an error on editconflict")
 	}
 }
