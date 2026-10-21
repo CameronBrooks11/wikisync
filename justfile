@@ -1,4 +1,4 @@
-# Python (uv) task runner
+# Go task runner
 
 set dotenv-load := false
 
@@ -6,39 +6,39 @@ set dotenv-load := false
 default:
     @just --list
 
-# Install dependencies and set up environment
+# Install dependencies and dev tools
 setup:
-    uv sync
+    go mod download
+    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
 
 # Format code (mutates working tree — use locally)
 fmt:
-    uv run ruff format .
-    uv run ruff check --fix .
+    gofmt -w .
 
 # Verify formatting (non-mutating — use in CI)
 fmt-check:
-    uv run ruff format --check .
+    @test -z "$(gofmt -l .)" || { echo "These files need 'just fmt':"; gofmt -l .; exit 1; }
 
 # Run linters
 lint:
-    uv run ruff check .
+    golangci-lint run
 
-# Type-check
-typecheck:
-    uv run pyright
+# Format-check + lint + vet (non-mutating — safe for CI)
+check: fmt-check lint
+    go vet ./...
 
-# Format + lint + type-check (non-mutating — safe for CI)
-check: fmt-check lint typecheck
-
-# Run tests
+# Run tests (race detector on)
 test:
-    uv run pytest
+    go test -race ./...
+
+# Build the binary into bin/
+build:
+    go build -o bin/wikisync .
 
 # Run the CLI
 run *args:
-    uv run wikisync {{args}}
+    go run . {{args}}
 
 # Remove build artifacts
 clean:
-    rm -rf .venv dist .pytest_cache .ruff_cache .pyright
-    find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+    rm -rf bin/

@@ -2,7 +2,7 @@
 
 Work with MediaWiki pages — like [Appropedia](https://www.appropedia.org) — on
 your own machine: pull pages as local wikitext, edit them with the tools you
-already use (IDE, grep, LLMs, cross-page search, offline), review a diff, then
+already use (editor, grep, LLMs, cross-page search, offline), review a diff, then
 push the changes back under your account. Like git, but for wikis.
 
 > **Status: early.** `pull`, `status`, and `diff` work; `push` is not implemented
@@ -10,52 +10,52 @@ push the changes back under your account. Like git, but for wikis.
 
 ## Why
 
-Editing wiki pages through a browser textarea is fine for one small change. It
-is not fine for maintaining a set of pages: no real editor, no offline work, no
+Editing wiki pages through a browser textarea is fine for one small change. It is
+not fine for maintaining a set of pages: no real editor, no offline work, no
 cross-page refactor, no LLM assistance, no local diff before you publish.
-`wikisync` pulls the wikitext down so your normal toolchain applies, then pushes
-it back through the MediaWiki API.
+`wikisync` pulls the wikitext down so your normal toolchain applies, then (soon)
+pushes it back through the MediaWiki API.
 
 ## Install
 
-Requires [`uv`](https://docs.astral.sh/uv/).
+Download a binary from the [releases](https://github.com/CameronBrooks11/wikisync/releases),
+or build from source with Go 1.23+:
 
 ```sh
-git clone https://github.com/CameronBrooks11/wikisync
-cd wikisync
-just setup      # or: uv sync
+go install github.com/CameronBrooks11/wikisync@latest
 ```
 
 ## Usage
 
+Flags come before page titles.
+
 ```sh
 # Fetch pages to local .wiki files (default wiki: appropedia.org)
-uv run wikisync pull "Welcome to Appropedia" --dir ./pages
+wikisync pull --dir ./pages "Welcome to Appropedia"
 
-# Edit the .wiki files with any tools, then see what changed since the pull
-uv run wikisync status --dir ./pages
+# Edit the .wiki files with any tools, then classify what changed since the pull
+wikisync status --dir ./pages
 # -> modified  Welcome to Appropedia (Welcome_to_Appropedia.wiki)
 
 # Show the actual unified diff of your local edits vs. what you pulled
-uv run wikisync diff --dir ./pages
+wikisync diff --dir ./pages
 ```
 
 `status` and `diff` are local only — they compare each file against the revision
-recorded at pull time and never contact the wiki. `pull` keeps the metadata in
+recorded at pull time and never contact the wiki. `pull` keeps metadata in
 `.wikisync/manifest.json` and an immutable snapshot of each page's pulled text in
-`.wikisync/baselines/`, which is what `diff` compares against.
-
-Not implemented yet:
-
-```sh
-wikisync push                   # publish edits as your authenticated account
-```
+`.wikisync/baselines/<pageid>.wiki`, which is what `diff` compares against. Pass
+`--force` to `pull` to overwrite local files that have unpulled changes.
 
 ## Development
 
+Requires Go and [`just`](https://github.com/casey/just).
+
 ```sh
-just check      # fmt-check + lint + typecheck (what CI runs)
-just test       # pytest
+just setup      # go mod download + install golangci-lint
+just check      # gofmt-check + golangci-lint + go vet (what CI runs)
+just test       # go test -race ./...
+just build      # build ./bin/wikisync
 ```
 
 ## License

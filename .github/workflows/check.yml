@@ -1,11 +1,8 @@
 # Calls the `just` recipes so CI and local share one gate definition.
 #
-# Path-aware: docs-only changes skip the heavy check/test jobs via
-# dorny/paths-filter, while the always-running `ok` aggregator still reports a
-# green required status — so a docs PR merges without running the full matrix.
-#
-# Branch protection: require ONLY the `ok` context (not `check`/`test`). Skipped
-# jobs don't block; only failures and cancellations do.
+# Path-aware: docs-only changes skip the heavy jobs via dorny/paths-filter,
+# while the always-running `ok` aggregator still reports a green required status.
+# Branch protection: require ONLY the `ok` context.
 
 name: Check
 
@@ -44,16 +41,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install just
-        uses: extractions/setup-just@v2
-
-      - uses: astral-sh/setup-uv@v6
-
-      - name: Setup
-        run: just setup
-
-      - name: Check (fmt + lint + typecheck)
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: extractions/setup-just@v2
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+      - name: Put GOPATH/bin on PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Check (fmt-check + lint + vet)
         run: just check
 
   test:
@@ -61,27 +58,17 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install just
-        uses: extractions/setup-just@v2
-
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-go@v5
         with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Setup
-        run: just setup
-
+          go-version-file: go.mod
+          cache: true
+      - uses: extractions/setup-just@v2
       - name: Test
         run: just test
 
   # ─── Unified gate ─────────────────────────────────────────────────────
-  # The ONLY job required by branch protection. Add every job to `needs:`.
   ok:
     name: ok
     if: always()
