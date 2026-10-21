@@ -27,9 +27,8 @@ htmlcov/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# uv
+# uv (uv.lock is tracked, for reproducible installs)
 .python-version
-uv.lock
 
 # Environment
 .env
