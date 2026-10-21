@@ -31,6 +31,11 @@ check: fmt-check lint
 test:
     go test -race ./...
 
+# Live push round-trip against a real wiki (opt-in; writes to and restores a page).
+# Needs WIKISYNC_TEST_PAGE + WIKISYNC_USERNAME + WIKISYNC_PASSWORD in the env.
+test-integration:
+    go test -tags integration -run TestLivePushRoundTrip -v ./internal/core/
+
 # Build the binary into bin/
 build:
     go build -o bin/wikisync .

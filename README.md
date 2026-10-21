@@ -73,6 +73,15 @@ just test       # go test -race ./...
 just build      # build ./bin/wikisync
 ```
 
+A live push round-trip is an opt-in test, excluded from `just test` and CI. It
+writes to, then restores, a **designated test page** (never a real content page):
+
+```sh
+export WIKISYNC_TEST_PAGE='User:You/sandbox'
+export WIKISYNC_USERNAME='You@botname' WIKISYNC_PASSWORD='…'
+just test-integration
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
