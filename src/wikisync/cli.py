@@ -6,7 +6,7 @@ Workflow (git-like, but for wikis):
     wikisync status                     show local edits against fetched revisions
     wikisync push                       publish staged edits as your wiki account
 
-``pull`` is implemented; ``status`` and ``push`` are stubs for now. The transport
+``pull`` and ``status`` are implemented; ``push`` is a stub for now. The transport
 is the MediaWiki API (default https://www.appropedia.org/w/api.php) via mwclient.
 Pushing will authenticate as a real user and edit a live public wiki, so it will
 be gated behind explicit confirmation when implemented.
@@ -23,13 +23,13 @@ from mwclient.errors import MwClientError
 from wikisync import __version__
 from wikisync.client import fetch_page, open_site
 from wikisync.pull import pull
+from wikisync.status import status
 
 DEFAULT_HOST = "www.appropedia.org"
 DEFAULT_PATH = "/w/"
 
 # Subcommands not yet implemented, mapped to a one-line description for --help.
 STUB_COMMANDS: dict[str, str] = {
-    "status": "show local edits against the fetched revisions",
     "push": "publish local edits as your authenticated wiki account",
 }
 
@@ -55,6 +55,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         type=Path,
         help="directory to write files into (default: current directory)",
+    )
+
+    status_parser = subparsers.add_parser(
+        "status", help="show local edits against the fetched revisions"
+    )
+    status_parser.add_argument(
+        "--dir",
+        default=".",
+        type=Path,
+        help="directory holding the pulled files (default: current directory)",
     )
 
     for name, help_text in STUB_COMMANDS.items():
@@ -85,6 +95,16 @@ def _run_pull(args: argparse.Namespace) -> int:
     return 0 if report.written else 1
 
 
+def _run_status(args: argparse.Namespace) -> int:
+    report = status(args.dir)
+    if not report.items:
+        print("nothing pulled yet; run 'wikisync pull <page>' first")
+        return 0
+    for item in report.items:
+        print(f"{item.state.value:<16} {item.title} ({item.file})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -93,5 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "pull":
         return _run_pull(args)
+    if args.command == "status":
+        return _run_status(args)
     print(f"wikisync {args.command}: not yet implemented", file=sys.stderr)
     return 2

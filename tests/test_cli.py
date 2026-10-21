@@ -37,3 +37,13 @@ def test_pull_parser_accepts_titles_and_options():
     assert args.command == "pull"
     assert args.titles == ["A", "B"]
     assert args.host == "example.org"
+
+
+def test_status_parser_accepts_dir():
+    args = build_parser().parse_args(["status", "--dir", "/tmp/x"])
+    assert args.command == "status"
+
+
+def test_status_on_empty_dir_succeeds(tmp_path, capsys):
+    assert main(["status", "--dir", str(tmp_path)]) == 0
+    assert "nothing pulled yet" in capsys.readouterr().out

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from wikisync.client import FetchedPage
-from wikisync.manifest import Entry, Manifest
+from wikisync.manifest import Entry, Manifest, content_hash
 
 # Characters that are unsafe in filenames across common filesystems.
 _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -53,6 +53,7 @@ def pull(
             revid=page.revid,
             host=host,
             path=path,
+            sha256=content_hash(page.text),
         )
         report.written.append((page.title, filename))
     manifest.save(root)

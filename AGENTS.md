@@ -10,8 +10,8 @@ grep, LLMs, cross-page analysis, offline), review a diff, then push the edits
 back under your own authenticated account. Git is the analogy, not the
 transport — the transport is the MediaWiki API via `mwclient`.
 
-This is an early scaffold: the CLI exposes the intended `pull` / `status` /
-`push` shape but the commands are not yet implemented.
+Status: `pull` (fetch pages + record a baseline) and `status` (local diff
+against that baseline, no network) are implemented; `push` is still a stub.
 
 ## Stack
 
