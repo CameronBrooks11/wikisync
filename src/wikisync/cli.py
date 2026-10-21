@@ -56,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="directory to write files into (default: current directory)",
     )
+    pull_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite local files even if they have unpulled changes",
+    )
 
     status_parser = subparsers.add_parser(
         "status", help="show local edits against the fetched revisions"
@@ -83,6 +88,7 @@ def _run_pull(args: argparse.Namespace) -> int:
             root=root,
             host=args.host,
             path=args.path,
+            force=args.force,
         )
     except (OSError, MwClientError) as exc:
         print(f"wikisync pull: could not reach {args.host}: {exc}", file=sys.stderr)
@@ -92,7 +98,17 @@ def _run_pull(args: argparse.Namespace) -> int:
         print(f"pulled {title!r} -> {filename}")
     for title in report.missing:
         print(f"skipped {title!r}: page does not exist", file=sys.stderr)
-    return 0 if report.written else 1
+    for title in report.skipped_dirty:
+        print(
+            f"skipped {title!r}: local file has unpulled changes (use --force to overwrite)",
+            file=sys.stderr,
+        )
+    for title, filename, owner in report.collisions:
+        print(
+            f"skipped {title!r}: filename {filename!r} is already used by {owner!r}",
+            file=sys.stderr,
+        )
+    return 1 if (report.skipped_dirty or report.collisions or not report.written) else 0
 
 
 def _run_status(args: argparse.Namespace) -> int:

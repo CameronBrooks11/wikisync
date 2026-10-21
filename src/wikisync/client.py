@@ -32,12 +32,29 @@ def open_site(host: str, path: str = "/w/", scheme: str = "https") -> mwclient.S
 
 
 def fetch_page(site: mwclient.Site, title: str) -> FetchedPage:
-    """Fetch one page's current wikitext. Missing pages come back with ``exists=False``."""
-    page = site.pages[title]
-    exists = bool(page.exists)
+    """Fetch one page's current wikitext and the revision it came from.
+
+    Content and revision id are read from the *same* revisions response, so the
+    recorded baseline revid always matches the saved text. (Reading them from
+    separate requests can skew if the page is edited in between.) Missing pages
+    come back with ``exists=False``.
+    """
+    resp = site.api(
+        "query",
+        prop="revisions",
+        titles=title,
+        rvprop="ids|content",
+        rvslots="main",
+        rvlimit=1,
+        formatversion=2,
+    )
+    page = resp["query"]["pages"][0]
+    if page.get("missing", False):
+        return FetchedPage(title=page.get("title", title), text="", revid=0, exists=False)
+    revision = page["revisions"][0]
     return FetchedPage(
-        title=str(page.name),
-        text=page.text() if exists else "",
-        revid=int(page.revision or 0),
-        exists=exists,
+        title=page["title"],
+        text=revision["slots"]["main"]["content"],
+        revid=int(revision["revid"]),
+        exists=True,
     )
