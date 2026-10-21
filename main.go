@@ -1,5 +1,5 @@
 // Command wikisync works with MediaWiki/Appropedia pages locally: pull pages as
-// wikitext, see what changed, and (eventually) push edits back.
+// wikitext, see what changed, and push edits back.
 //
 // Flags precede positional arguments, e.g. `wikisync pull --dir ./pages "Title"`.
 package main
@@ -7,9 +7,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/CameronBrooks11/wikisync/internal/core"
 	"github.com/CameronBrooks11/wikisync/internal/mw"
@@ -48,8 +46,7 @@ func run(args []string) int {
 	case "diff":
 		return cmdDiff(args[1:])
 	case "push":
-		fmt.Fprintln(os.Stderr, "wikisync push: not yet implemented")
-		return 2
+		return cmdPush(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "wikisync: unknown command %q (try 'wikisync --help')\n", args[0])
 		return 2
@@ -63,10 +60,13 @@ Usage:
   wikisync pull   [--host H] [--path P] [--dir D] [--force] PAGE [PAGE ...]
   wikisync status [--dir D]
   wikisync diff   [--dir D] [PAGE ...]
-  wikisync push   (not yet implemented)
+  wikisync push   [--host H] [--path P] [--dir D] [--apply] [--summary S] [PAGE ...]
 
 Flags precede page titles, e.g.:
   wikisync pull --dir ./pages "Welcome to Appropedia"
+
+push previews by default; --apply publishes and needs WIKISYNC_USERNAME and
+WIKISYNC_PASSWORD (a MediaWiki bot password) plus --summary.
 `)
 }
 
@@ -89,13 +89,8 @@ func cmdPull(args []string) int {
 		return 1
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	apiURL := mw.APIURL("https", *host, *path)
-	fetch := func(title string) (mw.FetchedPage, error) {
-		return mw.FetchPage(client, apiURL, userAgent(), title)
-	}
-
-	rep, err := core.Pull(titles, fetch, *dir, *host, *path, *force)
+	client := mw.NewClient(*host, *path, userAgent())
+	rep, err := core.Pull(titles, client.FetchPage, *dir, *host, *path, *force)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "wikisync pull: could not reach %s: %v\n", *host, err)
 		return 1
@@ -181,4 +176,76 @@ func cmdDiff(args []string) int {
 		fmt.Println("no local changes")
 	}
 	return 0
+}
+
+func cmdPush(args []string) int {
+	fs := flag.NewFlagSet("push", flag.ContinueOnError)
+	host := fs.String("host", defaultHost, "wiki host")
+	path := fs.String("path", defaultPath, "API script path")
+	dir := fs.String("dir", ".", "directory holding the pulled files")
+	apply := fs.Bool("apply", false, "actually publish edits (default: preview only)")
+	summary := fs.String("summary", "", "edit summary (required with --apply)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	var selected []string
+	if titles := fs.Args(); len(titles) > 0 {
+		selected = titles
+	}
+
+	client := mw.NewClient(*host, *path, userAgent())
+
+	if *apply {
+		if *summary == "" {
+			fmt.Fprintln(os.Stderr, "wikisync push --apply: --summary is required")
+			return 2
+		}
+		user, pass := os.Getenv("WIKISYNC_USERNAME"), os.Getenv("WIKISYNC_PASSWORD")
+		if user == "" || pass == "" {
+			fmt.Fprintln(os.Stderr, "wikisync push --apply: set WIKISYNC_USERNAME and WIKISYNC_PASSWORD (a MediaWiki bot password)")
+			return 2
+		}
+		if err := client.Login(user, pass); err != nil {
+			fmt.Fprintf(os.Stderr, "wikisync push: login failed: %v\n", err)
+			return 1
+		}
+	}
+
+	results, err := core.Push(*dir, selected, client, *apply, *summary)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "wikisync push: %v\n", err)
+		return 1
+	}
+
+	exit := 0
+	actionable := false
+	for _, r := range results {
+		switch r.Action {
+		case core.Pushed:
+			fmt.Printf("pushed %q (now rev %d)\n", r.Title, r.NewRevID)
+			actionable = true
+		case core.WouldPush:
+			fmt.Printf("would push %q\n", r.Title)
+			actionable = true
+		case core.SkipUnchanged:
+			// quiet: nothing to do
+		case core.Conflict:
+			fmt.Fprintf(os.Stderr, "conflict %q: %s\n", r.Title, r.Detail)
+			exit = 1
+		case core.PushError:
+			fmt.Fprintf(os.Stderr, "error %q: %s\n", r.Title, r.Detail)
+			exit = 1
+		case core.NoBaselinePush:
+			fmt.Fprintf(os.Stderr, "skipped %q: %s\n", r.Title, r.Detail)
+			exit = 1
+		}
+	}
+	if !actionable && exit == 0 {
+		if *apply {
+			fmt.Println("nothing to push")
+		} else {
+			fmt.Println("no local changes to push")
+		}
+	}
+	return exit
 }

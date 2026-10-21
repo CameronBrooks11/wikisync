@@ -11,9 +11,17 @@ under your own authenticated account. Git is the analogy, not the transport — 
 transport is the MediaWiki JSON API.
 
 Status: `pull` (fetch pages, snapshot a baseline, record it in the manifest),
-`status` (local change classification) and `diff` (local unified diff vs the
-baseline) are implemented, all offline except `pull`; `push` is still a stub.
-Baselines live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
+`status` (local change classification), `diff` (local unified diff vs the
+baseline) and `push` (preview by default; `--apply` publishes) are implemented.
+`status` and `diff` are offline; `pull` and `push` touch the network. Baselines
+live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
+
+`push` logs in with a bot password from `WIKISYNC_USERNAME`/`WIKISYNC_PASSWORD`,
+passes `baserevid` for server-side conflict detection, refuses pages whose remote
+revision moved past the baseline, skips unchanged pages, never deletes remote
+pages, and advances the baseline only after a confirmed edit. It has not yet been
+exercised against a live wiki in an integration test — do that against a
+controlled instance or a designated test page, never live Appropedia.
 
 ## Stack
 
