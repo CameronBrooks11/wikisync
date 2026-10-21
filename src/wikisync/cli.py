@@ -4,12 +4,13 @@ Workflow (git-like, but for wikis):
 
     wikisync pull <page> [<page> ...]   fetch wiki pages to local wikitext files
     wikisync status                     show local edits against fetched revisions
+    wikisync diff [<page> ...]          unified diff of local files vs the baseline
     wikisync push                       publish staged edits as your wiki account
 
-``pull`` and ``status`` are implemented; ``push`` is a stub for now. The transport
-is the MediaWiki API (default https://www.appropedia.org/w/api.php) via mwclient.
-Pushing will authenticate as a real user and edit a live public wiki, so it will
-be gated behind explicit confirmation when implemented.
+``pull``, ``status`` and ``diff`` are implemented; ``push`` is a stub for now. The
+transport is the MediaWiki API (default https://www.appropedia.org/w/api.php) via
+mwclient. Pushing will authenticate as a real user and edit a live public wiki, so
+it will be gated behind explicit confirmation when implemented.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from mwclient.errors import MwClientError
 
 from wikisync import __version__
 from wikisync.client import fetch_page, open_site
+from wikisync.diff import DiffState, diff
 from wikisync.pull import pull
 from wikisync.status import status
 
@@ -66,6 +68,19 @@ def build_parser() -> argparse.ArgumentParser:
         "status", help="show local edits against the fetched revisions"
     )
     status_parser.add_argument(
+        "--dir",
+        default=".",
+        type=Path,
+        help="directory holding the pulled files (default: current directory)",
+    )
+
+    diff_parser = subparsers.add_parser(
+        "diff", help="unified diff of local files against the baseline"
+    )
+    diff_parser.add_argument(
+        "titles", nargs="*", metavar="PAGE", help="page title(s) to diff (default: all)"
+    )
+    diff_parser.add_argument(
         "--dir",
         default=".",
         type=Path,
@@ -121,6 +136,31 @@ def _run_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_diff(args: argparse.Namespace) -> int:
+    results = diff(args.dir, args.titles or None)
+
+    found = {d.title for d in results}
+    for title in args.titles:
+        if title not in found:
+            print(f"diff: {title!r} is not tracked (run 'wikisync pull' first)", file=sys.stderr)
+
+    printed = False
+    for page_diff in results:
+        if page_diff.state is DiffState.CHANGED:
+            sys.stdout.writelines(page_diff.lines)
+            printed = True
+        elif page_diff.state is DiffState.DELETED:
+            print(f"{page_diff.title}: local file deleted", file=sys.stderr)
+        elif page_diff.state is DiffState.NO_BASELINE:
+            print(
+                f"{page_diff.title}: no baseline snapshot; re-pull to enable diff",
+                file=sys.stderr,
+            )
+    if not printed:
+        print("no local changes")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -131,5 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         return _run_pull(args)
     if args.command == "status":
         return _run_status(args)
+    if args.command == "diff":
+        return _run_diff(args)
     print(f"wikisync {args.command}: not yet implemented", file=sys.stderr)
     return 2

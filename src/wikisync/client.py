@@ -24,6 +24,7 @@ class FetchedPage:
     text: str
     revid: int
     exists: bool
+    pageid: int = 0
 
 
 def open_site(host: str, path: str = "/w/", scheme: str = "https") -> mwclient.Site:
@@ -57,4 +58,5 @@ def fetch_page(site: mwclient.Site, title: str) -> FetchedPage:
         text=revision["slots"]["main"]["content"],
         revid=int(revision["revid"]),
         exists=True,
+        pageid=int(page["pageid"]),
     )

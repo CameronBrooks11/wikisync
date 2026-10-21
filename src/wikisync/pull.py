@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from wikisync.baseline import write_baseline
 from wikisync.client import FetchedPage
 from wikisync.manifest import Entry, Manifest, content_hash
 
@@ -87,6 +88,7 @@ def pull(
             continue
 
         dest.write_text(page.text, encoding="utf-8")
+        write_baseline(root, page.pageid, page.text)
         manifest.entries[page.title] = Entry(
             title=page.title,
             file=filename,
@@ -94,6 +96,7 @@ def pull(
             host=host,
             path=path,
             sha256=content_hash(page.text),
+            pageid=page.pageid,
         )
         report.written.append((page.title, filename))
     manifest.save(root)
