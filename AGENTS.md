@@ -19,9 +19,12 @@ live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 `push` logs in with a bot password from `WIKISYNC_USERNAME`/`WIKISYNC_PASSWORD`,
 passes `baserevid` for server-side conflict detection, refuses pages whose remote
 revision moved past the baseline, skips unchanged pages, never deletes remote
-pages, and advances the baseline only after a confirmed edit. It has not yet been
-exercised against a live wiki in an integration test — do that against a
-controlled instance or a designated test page, never live Appropedia.
+pages, and advances the baseline only after a confirmed edit. A live round-trip
+is covered by an opt-in integration test (`just test-integration`, build tag
+`integration`) that pulls, edits, pushes and then restores a **designated test
+page** set via `WIKISYNC_TEST_PAGE` — never a real content page. It is excluded
+from the default `go test` and from CI, and needs bot-password credentials in the
+environment to run.
 
 ## Stack
 
