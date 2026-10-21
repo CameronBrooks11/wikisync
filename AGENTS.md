@@ -5,10 +5,10 @@ Instructions for AI coding agents working in this repository.
 ## Project
 
 `wikisync` is a CLI for working with MediaWiki pages (e.g. Appropedia) locally:
-pull one or many pages as local wikitext files, edit them with any tools (IDE,
-grep, LLMs, cross-page analysis, offline), review a diff, then push the edits
-back under your own authenticated account. Git is the analogy, not the
-transport — the transport is the MediaWiki API via `mwclient`.
+pull one or many pages as local wikitext files, edit them with any tools (editor,
+grep, LLMs, cross-page analysis, offline), review a diff, then push the edits back
+under your own authenticated account. Git is the analogy, not the transport — the
+transport is the MediaWiki JSON API.
 
 Status: `pull` (fetch pages, snapshot a baseline, record it in the manifest),
 `status` (local change classification) and `diff` (local unified diff vs the
@@ -17,46 +17,48 @@ Baselines live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2
 
 ## Stack
 
-- **Language** — Python ≥ 3.12, managed with `uv`.
-- **MediaWiki client** — `mwclient` (lightweight MediaWiki API client).
-- **Tooling** — `ruff` (format + lint), `pyright` (types), `pytest` (tests).
+- **Language** — Go 1.23+.
+- **Dependencies** — standard library for the read client; `go-difflib` for
+  unified diffs. No MediaWiki client library yet (the read path is plain
+  HTTP+JSON); `push` will add one for auth/edit tokens.
+- **Tooling** — `gofmt`, `golangci-lint`, `go vet`, `go test -race`.
 
 ## Layout
 
 ```
-src/wikisync/     package code (cli.py is the entrypoint)
-tests/            pytest tests, mirroring src
+main.go              CLI: flag parsing and dispatch
+internal/mw/         MediaWiki API read client
+internal/store/      manifest + baseline snapshots (.wikisync/)
+internal/core/       pull, status, diff
 ```
 
 ## Commands
 
 ```sh
-just setup        # uv sync — install deps + create the venv
-just fmt          # format (ruff format + ruff check --fix)
-just check        # fmt-check + lint + typecheck (CI-equivalent)
-just test         # pytest
-just run -- …     # run the CLI (e.g. just run -- --version)
+just setup        # go mod download + install golangci-lint
+just fmt          # gofmt -w
+just check        # fmt-check + lint + vet (CI-equivalent)
+just test         # go test -race ./...
+just build        # build ./bin/wikisync
+just run -- ...    # go run . ...
 ```
 
 ## Conventions
 
-- Format before committing; `just check` is the gate CI runs.
-- Tests mirror source structure.
+- CLI flags precede positional titles (`wikisync pull --dir D "Title"`).
+- The `.wikisync/` on-disk format is language-agnostic and versioned
+  (`store.CurrentVersion`); bump it and handle old manifests when it changes.
+- Keep `status` and `diff` offline; only `pull`/`push` touch the network.
 - Conventional Commits.
 
 ## Constraints
 
 - **Pushing edits writes to a live, public wiki under a real user.** Treat every
-  write path as ask-first: it must be explicit, dry-run-able, and never run by
-  default. Reads are unauthenticated and safe.
-- **Auth is a credential.** When push lands, authenticate via a MediaWiki bot
-  password or OAuth pulled from the environment or a secret manager — never
-  hardcode or commit credentials, and never log them.
-- Identify the client to the API with a descriptive, honest `User-Agent`; do not
-  put a personal email in requests unless the maintainer chooses to.
+  write path as ask-first: explicit, dry-run-able, never run by default. Reads
+  are unauthenticated and safe.
+- **Auth is a credential.** When `push` lands, read a bot password or OAuth token
+  from the environment or a secret manager — never hardcode, commit, or log it.
+- Identify the client to the API with an honest `User-Agent`; no personal email.
 - Do not add dependencies without justification.
-- Do not add AI attribution to commits or PR descriptions — no co-author
-  trailers, session links, or "generated with" footers.
-- Do not let a check report success when it could not run. A check that does not
-  apply may pass, but must name itself as skipped; one that could not complete
-  must not exit 0.
+- Do not add AI attribution to commits or PR descriptions.
+- Do not let a check report success when it could not run.

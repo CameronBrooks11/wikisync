@@ -1,11 +1,4 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.12
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -19,3 +12,14 @@ repos:
     rev: v8.30.1
     hooks:
       - id: gitleaks
+
+  # gofmt runs from the local Go toolchain; it rewrites files in place, so a
+  # commit with unformatted Go is aborted until re-staged. Heavier gates
+  # (golangci-lint, go vet, tests) run via `just check` / `just test` and CI.
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -w
+        language: system
+        types: [go]
