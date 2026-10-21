@@ -1,0 +1,45 @@
+# Publish to PyPI via Trusted Publishing (OIDC) on a version tag.
+#
+# Configured on PyPI as a GitHub trusted publisher:
+#   repository: CameronBrooks11/wikisync   workflow: release.yml   environment: pypi
+#
+# Tag a release to trigger it:  git tag v0.1.0 && git push origin v0.1.0
+# No API token is stored — the `pypi` environment + id-token permission mint a
+# short-lived OIDC credential at publish time.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build sdist and wheel
+        run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
