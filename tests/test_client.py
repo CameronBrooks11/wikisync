@@ -34,6 +34,7 @@ def test_fetch_page_reads_text_and_revid_from_the_same_revision():
     assert page.exists
     assert page.title == "Water Pump"
     assert page.revid == 99
+    assert page.pageid == 5
     assert page.text == "hello\n"
     # Content and id came from a single query asking for both.
     assert site.calls[0]["prop"] == "revisions"
@@ -47,4 +48,5 @@ def test_fetch_page_missing():
 
     assert not page.exists
     assert page.revid == 0
+    assert page.pageid == 0
     assert page.text == ""

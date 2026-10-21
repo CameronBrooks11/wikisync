@@ -5,7 +5,8 @@ your own machine: pull pages as local wikitext, edit them with the tools you
 already use (IDE, grep, LLMs, cross-page search, offline), review a diff, then
 push the changes back under your account. Like git, but for wikis.
 
-> **Status: early.** `pull` and `status` work; `push` is not implemented yet.
+> **Status: early.** `pull`, `status`, and `diff` work; `push` is not implemented
+> yet.
 
 ## Why
 
@@ -34,10 +35,15 @@ uv run wikisync pull "Welcome to Appropedia" --dir ./pages
 # Edit the .wiki files with any tools, then see what changed since the pull
 uv run wikisync status --dir ./pages
 # -> modified  Welcome to Appropedia (Welcome_to_Appropedia.wiki)
+
+# Show the actual unified diff of your local edits vs. what you pulled
+uv run wikisync diff --dir ./pages
 ```
 
-`status` is local only — it compares each file against the revision recorded at
-pull time (in `.wikisync/manifest.json`) and never contacts the wiki.
+`status` and `diff` are local only — they compare each file against the revision
+recorded at pull time and never contact the wiki. `pull` keeps the metadata in
+`.wikisync/manifest.json` and an immutable snapshot of each page's pulled text in
+`.wikisync/baselines/`, which is what `diff` compares against.
 
 Not implemented yet:
 

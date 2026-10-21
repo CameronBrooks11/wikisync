@@ -10,8 +10,10 @@ grep, LLMs, cross-page analysis, offline), review a diff, then push the edits
 back under your own authenticated account. Git is the analogy, not the
 transport — the transport is the MediaWiki API via `mwclient`.
 
-Status: `pull` (fetch pages + record a baseline) and `status` (local diff
-against that baseline, no network) are implemented; `push` is still a stub.
+Status: `pull` (fetch pages, snapshot a baseline, record it in the manifest),
+`status` (local change classification) and `diff` (local unified diff vs the
+baseline) are implemented, all offline except `pull`; `push` is still a stub.
+Baselines live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 
 ## Stack
 
