@@ -1,7 +1,7 @@
 import pytest
 
 from wikisync import __version__
-from wikisync.cli import PLANNED_COMMANDS, build_parser, main
+from wikisync.cli import STUB_COMMANDS, build_parser, main
 
 
 def test_version_is_set():
@@ -21,18 +21,19 @@ def test_version_flag_exits_zero(capsys):
     assert __version__ in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("command", sorted(PLANNED_COMMANDS))
-def test_planned_command_reports_not_yet_implemented(command, capsys):
+@pytest.mark.parametrize("command", sorted(STUB_COMMANDS))
+def test_stub_command_reports_not_yet_implemented(command, capsys):
     assert main([command]) == 2
     assert "not yet implemented" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("command", sorted(PLANNED_COMMANDS))
-def test_parser_accepts_each_planned_command(command):
-    args = build_parser().parse_args([command])
-    assert args.command == command
-
-
-def test_parser_rejects_unknown_command():
+def test_pull_parser_requires_a_title():
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["definitely-not-a-command"])
+        build_parser().parse_args(["pull"])  # nargs="+" → at least one title required
+
+
+def test_pull_parser_accepts_titles_and_options():
+    args = build_parser().parse_args(["pull", "A", "B", "--host", "example.org"])
+    assert args.command == "pull"
+    assert args.titles == ["A", "B"]
+    assert args.host == "example.org"
