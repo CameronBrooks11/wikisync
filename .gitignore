@@ -41,3 +41,7 @@ Thumbs.db
 
 # Personal scratch (never committed)
 working/
+
+# Local agent state (per-checkout, never committed)
+.claude/
+.mcp.json

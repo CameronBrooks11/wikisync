@@ -1,27 +1,34 @@
 """Command-line interface for wikisync.
 
-Intended workflow (not yet implemented — this is a scaffold):
+Workflow (git-like, but for wikis):
 
-    wikisync pull <page|category>   fetch wiki pages to local wikitext files
-    wikisync status                 show local edits against the fetched revisions
-    wikisync push                   publish staged edits as your wiki account
+    wikisync pull <page> [<page> ...]   fetch wiki pages to local wikitext files
+    wikisync status                     show local edits against fetched revisions
+    wikisync push                       publish staged edits as your wiki account
 
-The transport is the MediaWiki API (e.g. https://www.appropedia.org/w/api.php),
-driven via ``mwclient``. Pushing authenticates as a real user and edits a live
-public wiki, so it will be gated behind explicit confirmation when implemented.
+``pull`` is implemented; ``status`` and ``push`` are stubs for now. The transport
+is the MediaWiki API (default https://www.appropedia.org/w/api.php) via mwclient.
+Pushing will authenticate as a real user and edit a live public wiki, so it will
+be gated behind explicit confirmation when implemented.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
+
+from mwclient.errors import MwClientError
 
 from wikisync import __version__
+from wikisync.client import fetch_page, open_site
+from wikisync.pull import pull
 
-# Planned subcommands, kept here so --help documents the shape before the
-# behaviour exists. Each maps to a one-line description.
-PLANNED_COMMANDS: dict[str, str] = {
-    "pull": "fetch wiki pages to local wikitext files",
+DEFAULT_HOST = "www.appropedia.org"
+DEFAULT_PATH = "/w/"
+
+# Subcommands not yet implemented, mapped to a one-line description for --help.
+STUB_COMMANDS: dict[str, str] = {
     "status": "show local edits against the fetched revisions",
     "push": "publish local edits as your authenticated wiki account",
 }
@@ -32,15 +39,50 @@ def build_parser() -> argparse.ArgumentParser:
         prog="wikisync",
         description="Work with MediaWiki/Appropedia pages locally — pull, edit, push.",
     )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {__version__}",
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", metavar="command")
-    for name, help_text in PLANNED_COMMANDS.items():
+
+    pull_parser = subparsers.add_parser("pull", help="fetch wiki pages to local wikitext files")
+    pull_parser.add_argument("titles", nargs="+", metavar="PAGE", help="page title(s) to fetch")
+    pull_parser.add_argument(
+        "--host", default=DEFAULT_HOST, help=f"wiki host (default: {DEFAULT_HOST})"
+    )
+    pull_parser.add_argument(
+        "--path", default=DEFAULT_PATH, help=f"API script path (default: {DEFAULT_PATH})"
+    )
+    pull_parser.add_argument(
+        "--dir",
+        default=".",
+        type=Path,
+        help="directory to write files into (default: current directory)",
+    )
+
+    for name, help_text in STUB_COMMANDS.items():
         subparsers.add_parser(name, help=help_text)
     return parser
+
+
+def _run_pull(args: argparse.Namespace) -> int:
+    root: Path = args.dir
+    root.mkdir(parents=True, exist_ok=True)
+    try:
+        site = open_site(args.host, path=args.path)
+        report = pull(
+            args.titles,
+            fetch=lambda title: fetch_page(site, title),
+            root=root,
+            host=args.host,
+            path=args.path,
+        )
+    except (OSError, MwClientError) as exc:
+        print(f"wikisync pull: could not reach {args.host}: {exc}", file=sys.stderr)
+        return 1
+
+    for title, filename in report.written:
+        print(f"pulled {title!r} -> {filename}")
+    for title in report.missing:
+        print(f"skipped {title!r}: page does not exist", file=sys.stderr)
+    return 0 if report.written else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,5 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 0
+    if args.command == "pull":
+        return _run_pull(args)
     print(f"wikisync {args.command}: not yet implemented", file=sys.stderr)
     return 2
