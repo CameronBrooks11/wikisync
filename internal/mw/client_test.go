@@ -117,3 +117,49 @@ func TestEditReportsError(t *testing.T) {
 		t.Fatal("want an error on editconflict")
 	}
 }
+
+// editServer answers token requests and returns body for the edit itself.
+func editServer(body string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("action") == "query" {
+			_, _ = io.WriteString(w, `{"query":{"tokens":{"csrftoken":"T"}}}`)
+			return
+		}
+		_, _ = io.WriteString(w, body)
+	}))
+}
+
+func TestEditNoChangeReturnsZero(t *testing.T) {
+	srv := editServer(`{"edit":{"result":"Success","pageid":5,"title":"A","nochange":true}}`)
+	defer srv.Close()
+
+	rev, err := testClient(srv).Edit("A", "x", "s", 1)
+	if err != nil || rev != 0 {
+		t.Fatalf("Edit = (%d, %v), want (0, nil) for a null edit", rev, err)
+	}
+}
+
+func TestEditSuccessWithoutRevisionIsAnError(t *testing.T) {
+	srv := editServer(`{"edit":{"result":"Success","pageid":5,"title":"A"}}`)
+	defer srv.Close()
+
+	if _, err := testClient(srv).Edit("A", "x", "s", 1); err == nil {
+		t.Fatal("want an error when success carries neither newrevid nor nochange")
+	}
+}
+
+func TestRevisionText(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("revids"); got != "1234" {
+			t.Errorf("revids = %q, want 1234", got)
+		}
+		_, _ = io.WriteString(w, `{"query":{"pages":[{"pageid":5,"title":"A",`+
+			`"revisions":[{"revid":1234,"slots":{"main":{"content":"stored text"}}}]}]}}`)
+	}))
+	defer srv.Close()
+
+	text, err := testClient(srv).RevisionText(1234)
+	if err != nil || text != "stored text" {
+		t.Fatalf("RevisionText = (%q, %v)", text, err)
+	}
+}

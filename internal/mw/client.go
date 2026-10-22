@@ -206,7 +206,8 @@ func (c *Client) Login(username, password string) error {
 }
 
 // Edit replaces a page's wikitext. baseRevID (when > 0) is passed to the API for
-// server-side edit-conflict protection. Returns the new revision id.
+// server-side edit-conflict protection. Returns the new revision id, or 0 when
+// the wiki made no change (a null edit, reported by the API as "nochange").
 func (c *Client) Edit(title, text, summary string, baseRevID int64) (int64, error) {
 	csrf, err := c.token("csrf")
 	if err != nil {
@@ -235,6 +236,7 @@ func (c *Client) Edit(title, text, summary string, baseRevID int64) (int64, erro
 		Edit struct {
 			Result   string `json:"result"`
 			NewRevID int64  `json:"newrevid"`
+			NoChange bool   `json:"nochange"`
 		} `json:"edit"`
 		Error *struct {
 			Code string `json:"code"`
@@ -250,5 +252,44 @@ func (c *Client) Edit(title, text, summary string, baseRevID int64) (int64, erro
 	if out.Edit.Result != "Success" {
 		return 0, fmt.Errorf("edit not successful: %s", out.Edit.Result)
 	}
+	if out.Edit.NoChange {
+		return 0, nil
+	}
+	if out.Edit.NewRevID == 0 {
+		return 0, fmt.Errorf("edit reported success without a new revision id")
+	}
 	return out.Edit.NewRevID, nil
+}
+
+// RevisionText returns the wikitext the wiki stored for one revision.
+func (c *Client) RevisionText(revID int64) (string, error) {
+	resp, err := c.get(url.Values{
+		"action":        {"query"},
+		"prop":          {"revisions"},
+		"revids":        {strconv.FormatInt(revID, 10)},
+		"rvprop":        {"ids|content"},
+		"rvslots":       {"main"},
+		"format":        {"json"},
+		"formatversion": {"2"},
+	})
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("mediawiki api: %s", resp.Status)
+	}
+
+	var parsed apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return "", err
+	}
+	for _, page := range parsed.Query.Pages {
+		for _, rev := range page.Revisions {
+			if rev.RevID == revID {
+				return rev.Slots.Main.Content, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("revision %d not found", revID)
 }

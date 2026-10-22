@@ -60,8 +60,10 @@ recorded at pull time and never contact the wiki. `pull` keeps metadata in
 `push` is preview-by-default and safe: it only writes with `--apply`, refuses
 pages whose wiki revision moved past your baseline (re-pull to resolve), skips
 unchanged pages, never deletes or creates remote pages (it only edits pages that
-already exist), and advances a page's baseline only after a successful edit.
-Authentication reads `WIKISYNC_USERNAME` /
+already exist), and advances a page's baseline only after a successful edit. The
+wiki may save a slightly different form of what you sent (it trims trailing
+whitespace, for example), so after a push your local file is rewritten to match
+what the wiki actually stored. Authentication reads `WIKISYNC_USERNAME` /
 `WIKISYNC_PASSWORD` from the environment — use a scoped MediaWiki bot password,
 not your account login.
 
