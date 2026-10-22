@@ -72,8 +72,17 @@ func (c *Client) post(params url.Values) (*http.Response, error) {
 	return c.HTTP.Do(req)
 }
 
+// apiError is MediaWiki's error envelope: {"error":{"code":…,"info":…}}.
+type apiError struct {
+	Code string `json:"code"`
+	Info string `json:"info"`
+}
+
+func (e *apiError) Error() string { return "mediawiki api error " + e.Code + ": " + e.Info }
+
 // apiResponse mirrors a formatversion=2 query/revisions response.
 type apiResponse struct {
+	Error *apiError `json:"error"`
 	Query struct {
 		Pages []struct {
 			PageID    int64  `json:"pageid"`
@@ -116,6 +125,9 @@ func (c *Client) FetchPage(title string) (FetchedPage, error) {
 	var parsed apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return FetchedPage{}, err
+	}
+	if parsed.Error != nil {
+		return FetchedPage{}, parsed.Error
 	}
 	if len(parsed.Query.Pages) == 0 {
 		return FetchedPage{}, fmt.Errorf("no page in response for %q", title)
@@ -160,12 +172,16 @@ func (c *Client) token(tokenType string) (string, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	var out struct {
+		Error *apiError `json:"error"`
 		Query struct {
 			Tokens map[string]string `json:"tokens"`
 		} `json:"query"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", err
+	}
+	if out.Error != nil {
+		return "", out.Error
 	}
 	tok := out.Query.Tokens[tokenType+"token"]
 	if tok == "" {
@@ -290,6 +306,9 @@ func (c *Client) RevisionText(revID int64) (string, error) {
 	var parsed apiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return "", err
+	}
+	if parsed.Error != nil {
+		return "", parsed.Error
 	}
 	for _, page := range parsed.Query.Pages {
 		for _, rev := range page.Revisions {
