@@ -40,7 +40,7 @@ test-integration:
     eval "$exports"
     WIKISYNC_REQUIRE_INTEGRATION=1 go test -tags integration -run TestLivePushRoundTrip -count=1 -v ./internal/core/
 
-[doc("Push round-trip against a real wiki; needs WIKISYNC_TEST_PAGE, WIKISYNC_USERNAME, WIKISYNC_PASSWORD")]
+[doc("Push round-trip against a real wiki; needs WIKISYNC_TEST_PAGE and bot-password credentials (see README)")]
 test-live:
     WIKISYNC_REQUIRE_INTEGRATION=1 go test -tags integration -run TestLivePushRoundTrip -count=1 -v ./internal/core/
 

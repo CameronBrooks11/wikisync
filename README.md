@@ -46,8 +46,8 @@ wikisync push --dir ./pages
 
 # Publish, authenticated as your account (requires a bot password + a summary).
 # Experimental: not yet verified against a live wiki.
-export WIKISYNC_USERNAME='You@botname'
-export WIKISYNC_PASSWORD='…'   # a MediaWiki bot password, never your login
+export WIKISYNC_USERNAME_APPROPEDIA='You@botname'
+export WIKISYNC_PASSWORD_APPROPEDIA='…'   # a MediaWiki bot password, never your login
 wikisync push --dir ./pages --apply --summary "Fix typos"
 ```
 
@@ -63,9 +63,15 @@ unchanged pages, never deletes or creates remote pages (it only edits pages that
 already exist), and advances a page's baseline only after a successful edit. The
 wiki may save a slightly different form of what you sent (it trims trailing
 whitespace, for example), so after a push your local file is rewritten to match
-what the wiki actually stored. Authentication reads `WIKISYNC_USERNAME` /
-`WIKISYNC_PASSWORD` from the environment — use a scoped MediaWiki bot password,
-not your account login.
+what the wiki actually stored.
+
+Authentication uses a scoped MediaWiki bot password, never your account login.
+Credentials are read per wiki: for `www.appropedia.org`, wikisync looks for
+`WIKISYNC_USERNAME_APPROPEDIA` and `WIKISYNC_PASSWORD_APPROPEDIA` (the label
+before the top-level domain, uppercased), so several wikis can be configured at
+once. If that pair isn't set, it falls back to `WIKISYNC_USERNAME` and
+`WIKISYNC_PASSWORD`. A pair is never mixed across the two. For hosts under a
+two-part suffix such as `.co.uk`, use the generic names.
 
 ## Development
 
@@ -97,7 +103,7 @@ at a real content page:
 
 ```sh
 export WIKISYNC_TEST_PAGE='User:You/wikisync-test'
-export WIKISYNC_USERNAME='You@botname' WIKISYNC_PASSWORD='…'
+export WIKISYNC_USERNAME_APPROPEDIA='You@botname' WIKISYNC_PASSWORD_APPROPEDIA='…'
 just test-live
 ```
 
