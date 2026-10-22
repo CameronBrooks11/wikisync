@@ -37,9 +37,11 @@ up)
         --pass="$admin_pass" WikisyncTest Admin >&2
 
     log "creating a bot password and the fixture page"
+    # Grant "basic" explicitly: Special:BotPasswords always includes it (it
+    # carries "read"), but this script grants exactly what it is given.
     # Its success message prints the password, so keep stdout out of the logs.
     wexec php maintenance/run.php createBotPassword \
-        --appid=wikisync --grants=editpage Admin "$bot_pass" >/dev/null
+        --appid=wikisync --grants=basic,editpage Admin "$bot_pass" >/dev/null
     printf "%s\n\n%s\n" "'''wikisync integration test'''" \
         "This page is a fixture for the wikisync integration test." |
         docker exec -i "$name" php maintenance/run.php edit \
@@ -48,15 +50,22 @@ up)
     # Maintenance ran as root; the web server must be able to write the database.
     wexec chown -R www-data:www-data /var/www/data
 
+    # Ready means the fixture page is readable anonymously, the way
+    # `wikisync pull` reads it.
+    probe="$api?action=query&prop=revisions&rvprop=ids&titles=$page&format=json&formatversion=2"
     ready=
     for _ in $(seq 1 60); do
-        out=$(curl -fsS "$api?action=query&meta=siteinfo&format=json" 2>/dev/null || true)
-        case $out in *'"sitename"'*) ready=1 && break ;; esac
+        out=$(curl -sS "$probe" 2>&1 || true)
+        case $out in *'"revid"'*) ready=1 && break ;; esac
         sleep 1
     done
     if [ -z "$ready" ]; then
-        log "the wiki did not answer at $api"
-        docker logs "$name" >&2 || true
+        log "the fixture page is not readable at $api"
+        log "last response: $out"
+        log "siteinfo: $(curl -sS "$api?action=query&meta=siteinfo&format=json" 2>&1 || true)"
+        log "LocalSettings permissions:"
+        wexec grep -nE 'GroupPermissions|wgServer|wgEnableBotPasswords' LocalSettings.php >&2 || true
+        docker logs --tail 50 "$name" >&2 || true
         exit 1
     fi
     log "ready at $api"
