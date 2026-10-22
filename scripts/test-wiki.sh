@@ -37,8 +37,9 @@ up)
         --pass="$admin_pass" WikisyncTest Admin >&2
 
     log "creating a bot password and the fixture page"
+    # Its success message prints the password, so keep stdout out of the logs.
     wexec php maintenance/run.php createBotPassword \
-        --appid=wikisync --grants=editpage Admin "$bot_pass" >&2
+        --appid=wikisync --grants=editpage Admin "$bot_pass" >/dev/null
     printf "%s\n\n%s\n" "'''wikisync integration test'''" \
         "This page is a fixture for the wikisync integration test." |
         docker exec -i "$name" php maintenance/run.php edit \
