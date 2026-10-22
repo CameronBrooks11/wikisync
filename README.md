@@ -78,14 +78,31 @@ just test       # go test -race ./...
 just build      # build ./bin/wikisync
 ```
 
-A live push round-trip is an opt-in test, excluded from `just test` and CI. It
-writes to, then restores, a **designated test page** (never a real content page):
+### Testing
+
+There are three layers:
+
+| Command | What it exercises | Needs |
+|---|---|---|
+| `just test` | All logic, against a fake wiki that behaves like MediaWiki | nothing |
+| `just test-integration` | The real push path against a throwaway MediaWiki 1.45 in Docker | Docker |
+| `just test-live` | The same round-trip against a real wiki you choose | a test page + bot password |
+
+CI runs the first two on every pull request. `test-integration` creates its own
+admin, bot password and fixture page inside the container, so it needs no
+secrets and never touches a real wiki.
+
+`test-live` writes to, then restores, a **designated test page**. Never point it
+at a real content page:
 
 ```sh
-export WIKISYNC_TEST_PAGE='User:You/sandbox'
+export WIKISYNC_TEST_PAGE='User:You/wikisync-test'
 export WIKISYNC_USERNAME='You@botname' WIKISYNC_PASSWORD='…'
-just test-integration
+just test-live
 ```
+
+Both integration recipes fail, rather than skip, when their settings are
+missing, so they can't report success for a run that didn't happen.
 
 ## License
 

@@ -36,12 +36,19 @@ func APIURL(scheme, host, path string) string {
 	return scheme + "://" + host + path + "api.php"
 }
 
-// NewClient returns a Client with its own cookie jar and a sane timeout.
+// NewClient returns a Client for an HTTPS wiki at host+path, with its own
+// cookie jar and a sane timeout.
 func NewClient(host, path, userAgent string) *Client {
+	return NewClientForAPI(APIURL("https", host, path), userAgent)
+}
+
+// NewClientForAPI is NewClient for a full api.php URL, e.g. a local test wiki
+// at http://localhost:8080/api.php.
+func NewClientForAPI(apiURL, userAgent string) *Client {
 	jar, _ := cookiejar.New(nil) // cookiejar.New never returns an error
 	return &Client{
 		HTTP:      &http.Client{Timeout: 30 * time.Second, Jar: jar},
-		APIURL:    APIURL("https", host, path),
+		APIURL:    apiURL,
 		UserAgent: userAgent,
 	}
 }

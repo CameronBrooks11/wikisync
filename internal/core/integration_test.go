@@ -1,15 +1,20 @@
 //go:build integration
 
-// Live push round-trip against a real wiki. Opt-in: build tag `integration`
-// plus env vars, so the default `go test ./...` and CI never compile or run it.
+// Push round-trip against a real MediaWiki. Build tag `integration`, so the
+// default `go test ./...` never compiles it. Configured by env vars:
 //
 //	WIKISYNC_TEST_PAGE      page title to edit (use a designated test page)
 //	WIKISYNC_USERNAME       MediaWiki bot-password username
 //	WIKISYNC_PASSWORD       MediaWiki bot password
-//	WIKISYNC_TEST_HOST      optional, default www.appropedia.org
+//	WIKISYNC_TEST_API_URL   optional full api.php URL (e.g. a local test wiki)
+//	WIKISYNC_TEST_HOST      optional, default www.appropedia.org (https)
 //	WIKISYNC_TEST_PATH      optional, default /w/
+//	WIKISYNC_REQUIRE_INTEGRATION  when set, missing config fails instead of skipping
 //
-// Run with: just test-integration
+// Run with:
+//
+//	just test-integration   throwaway MediaWiki in Docker (what CI runs)
+//	just test-live          a real wiki you have a test page and bot password on
 //
 // Each run adds about three revisions to the test page (an edit, an
 // out-of-band edit for the conflict check, and a restore) and leaves its text
@@ -18,6 +23,7 @@ package core
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,13 +46,26 @@ func TestLivePushRoundTrip(t *testing.T) {
 	user := os.Getenv("WIKISYNC_USERNAME")
 	pass := os.Getenv("WIKISYNC_PASSWORD")
 	if page == "" || user == "" || pass == "" {
-		t.Skip("set WIKISYNC_TEST_PAGE, WIKISYNC_USERNAME and WIKISYNC_PASSWORD to run")
+		msg := "set WIKISYNC_TEST_PAGE, WIKISYNC_USERNAME and WIKISYNC_PASSWORD to run"
+		if os.Getenv("WIKISYNC_REQUIRE_INTEGRATION") != "" {
+			t.Fatal(msg) // a required run must not pass by skipping
+		}
+		t.Skip(msg)
 	}
+	stamp := time.Now().UnixNano()
+	const ua = "wikisync-integration-test (+https://github.com/CameronBrooks11/wikisync)"
+
 	host := envOr("WIKISYNC_TEST_HOST", "www.appropedia.org")
 	path := envOr("WIKISYNC_TEST_PATH", "/w/")
-	stamp := time.Now().UnixNano()
-
-	client := mw.NewClient(host, path, "wikisync-integration-test (+https://github.com/CameronBrooks11/wikisync)")
+	client := mw.NewClient(host, path, ua)
+	if apiURL := os.Getenv("WIKISYNC_TEST_API_URL"); apiURL != "" {
+		u, err := url.Parse(apiURL)
+		if err != nil {
+			t.Fatalf("WIKISYNC_TEST_API_URL: %v", err)
+		}
+		host, path = u.Host, strings.TrimSuffix(u.Path, "api.php")
+		client = mw.NewClientForAPI(apiURL, ua)
+	}
 	dir := t.TempDir()
 
 	original, err := client.FetchPage(page)

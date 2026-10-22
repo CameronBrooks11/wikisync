@@ -19,12 +19,18 @@ live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 `push` logs in with a bot password from `WIKISYNC_USERNAME`/`WIKISYNC_PASSWORD`,
 passes `baserevid` for server-side conflict detection, refuses pages whose remote
 revision moved past the baseline, skips unchanged pages, never deletes remote
-pages, and advances the baseline only after a confirmed edit. A live round-trip
-is covered by an opt-in integration test (`just test-integration`, build tag
-`integration`) that pulls, edits, pushes and then restores a **designated test
-page** set via `WIKISYNC_TEST_PAGE` — never a real content page. It is excluded
-from the default `go test` and from CI, and needs bot-password credentials in the
-environment to run.
+pages, and advances the baseline to the text the wiki actually stored after a
+confirmed edit.
+
+Testing has three layers. `just test` runs the unit tests against a fake wiki
+that mimics MediaWiki's save behaviour (trailing-whitespace trim, null edits with
+no new revision, stale-`baserevid` conflicts). `just test-integration` runs the
+round-trip test (build tag `integration`) against a throwaway MediaWiki 1.45 in
+Docker via `scripts/test-wiki.sh`, which creates its own credentials; CI runs it
+on every PR. `just test-live` runs the same test against a real wiki's
+**designated test page** (`WIKISYNC_TEST_PAGE`) with real bot-password
+credentials, and is never part of CI. Agent sessions may not be able to reach
+the Docker socket; in that case CI is the runner for `test-integration`.
 
 ## Stack
 
