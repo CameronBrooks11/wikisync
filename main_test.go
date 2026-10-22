@@ -22,6 +22,11 @@ func silence(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
+	// Keep the result independent of credentials in the developer's shell.
+	for _, v := range []string{"WIKISYNC_USERNAME", "WIKISYNC_PASSWORD",
+		"WIKISYNC_USERNAME_APPROPEDIA", "WIKISYNC_PASSWORD_APPROPEDIA"} {
+		t.Setenv(v, "")
+	}
 	cases := []struct {
 		name string
 		args []string
@@ -35,6 +40,7 @@ func TestRun(t *testing.T) {
 		{"diff on empty dir", []string{"diff", "--dir", t.TempDir()}, 0},
 		{"push preview, nothing to push", []string{"push", "--dir", t.TempDir()}, 0},
 		{"push apply needs summary", []string{"push", "--apply", "--dir", t.TempDir()}, 2},
+		{"push apply needs credentials", []string{"push", "--apply", "--summary", "s", "--dir", t.TempDir()}, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

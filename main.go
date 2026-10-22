@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/CameronBrooks11/wikisync/internal/core"
+	"github.com/CameronBrooks11/wikisync/internal/creds"
 	"github.com/CameronBrooks11/wikisync/internal/mw"
 )
 
@@ -65,8 +66,11 @@ Usage:
 Flags precede page titles, e.g.:
   wikisync pull --dir ./pages "Welcome to Appropedia"
 
-push previews by default; --apply publishes and needs WIKISYNC_USERNAME and
-WIKISYNC_PASSWORD (a MediaWiki bot password) plus --summary.
+push previews by default; --apply publishes and needs a MediaWiki bot password
+plus --summary. Credentials are read from WIKISYNC_USERNAME_<WIKI> and
+WIKISYNC_PASSWORD_<WIKI>, where <WIKI> comes from the host
+(www.appropedia.org -> APPROPEDIA), else from WIKISYNC_USERNAME and
+WIKISYNC_PASSWORD.
 `)
 }
 
@@ -200,12 +204,13 @@ func cmdPush(args []string) int {
 			fmt.Fprintln(os.Stderr, "wikisync push --apply: --summary is required")
 			return 2
 		}
-		user, pass := os.Getenv("WIKISYNC_USERNAME"), os.Getenv("WIKISYNC_PASSWORD")
-		if user == "" || pass == "" {
-			fmt.Fprintln(os.Stderr, "wikisync push --apply: set WIKISYNC_USERNAME and WIKISYNC_PASSWORD (a MediaWiki bot password)")
+		c, ok := creds.Lookup(*host, os.Getenv)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "wikisync push --apply: set %s (a MediaWiki bot password)\n", creds.Hint(*host))
 			return 2
 		}
-		if err := client.Login(user, pass); err != nil {
+		fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)
+		if err := client.Login(c.Username, c.Password); err != nil {
 			fmt.Fprintf(os.Stderr, "wikisync push: login failed: %v\n", err)
 			return 1
 		}

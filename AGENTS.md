@@ -16,7 +16,10 @@ baseline) and `push` (preview by default; `--apply` publishes) are implemented.
 `status` and `diff` are offline; `pull` and `push` touch the network. Baselines
 live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 
-`push` logs in with a bot password from `WIKISYNC_USERNAME`/`WIKISYNC_PASSWORD`,
+`push` logs in with a bot password, read per wiki from
+`WIKISYNC_USERNAME_<WIKI>`/`WIKISYNC_PASSWORD_<WIKI>` (`<WIKI>` derived from the
+host by `internal/creds`, e.g. `APPROPEDIA`), falling back to
+`WIKISYNC_USERNAME`/`WIKISYNC_PASSWORD`,
 passes `baserevid` for server-side conflict detection, refuses pages whose remote
 revision moved past the baseline, skips unchanged pages, never deletes remote
 pages, and advances the baseline to the text the wiki actually stored after a

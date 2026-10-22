@@ -4,8 +4,9 @@
 // default `go test ./...` never compiles it. Configured by env vars:
 //
 //	WIKISYNC_TEST_PAGE      page title to edit (use a designated test page)
-//	WIKISYNC_USERNAME       MediaWiki bot-password username
-//	WIKISYNC_PASSWORD       MediaWiki bot password
+//	WIKISYNC_USERNAME[_<WIKI>], WIKISYNC_PASSWORD[_<WIKI>]
+//	                        bot-password credentials, looked up as push does
+//	                        (<WIKI> from the host, e.g. APPROPEDIA)
 //	WIKISYNC_TEST_API_URL   optional full api.php URL (e.g. a local test wiki)
 //	WIKISYNC_TEST_HOST      optional, default www.appropedia.org (https)
 //	WIKISYNC_TEST_PATH      optional, default /w/
@@ -30,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CameronBrooks11/wikisync/internal/creds"
 	"github.com/CameronBrooks11/wikisync/internal/mw"
 	"github.com/CameronBrooks11/wikisync/internal/store"
 )
@@ -42,16 +44,6 @@ func envOr(key, fallback string) string {
 }
 
 func TestLivePushRoundTrip(t *testing.T) {
-	page := os.Getenv("WIKISYNC_TEST_PAGE")
-	user := os.Getenv("WIKISYNC_USERNAME")
-	pass := os.Getenv("WIKISYNC_PASSWORD")
-	if page == "" || user == "" || pass == "" {
-		msg := "set WIKISYNC_TEST_PAGE, WIKISYNC_USERNAME and WIKISYNC_PASSWORD to run"
-		if os.Getenv("WIKISYNC_REQUIRE_INTEGRATION") != "" {
-			t.Fatal(msg) // a required run must not pass by skipping
-		}
-		t.Skip(msg)
-	}
 	stamp := time.Now().UnixNano()
 	const ua = "wikisync-integration-test (+https://github.com/CameronBrooks11/wikisync)"
 
@@ -66,6 +58,18 @@ func TestLivePushRoundTrip(t *testing.T) {
 		host, path = u.Host, strings.TrimSuffix(u.Path, "api.php")
 		client = mw.NewClientForAPI(apiURL, ua)
 	}
+
+	// Credentials are found the same way push finds them.
+	page := os.Getenv("WIKISYNC_TEST_PAGE")
+	c, haveCreds := creds.Lookup(host, os.Getenv)
+	if page == "" || !haveCreds {
+		msg := "set WIKISYNC_TEST_PAGE and " + creds.Hint(host) + " to run"
+		if os.Getenv("WIKISYNC_REQUIRE_INTEGRATION") != "" {
+			t.Fatal(msg) // a required run must not pass by skipping
+		}
+		t.Skip(msg)
+	}
+	user, pass := c.Username, c.Password
 	dir := t.TempDir()
 
 	original, err := client.FetchPage(page)
