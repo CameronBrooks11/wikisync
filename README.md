@@ -5,9 +5,11 @@ your own machine: pull pages as local wikitext, edit them with the tools you
 already use (editor, grep, LLMs, cross-page search, offline), review a diff, then
 push the changes back under your account. Like git, but for wikis.
 
-> **Status: early.** `pull`, `status`, `diff` and `push` previews work and are
-> tested against a live wiki. **`push --apply` (publishing) is experimental:** it
-> is unit-tested but has not yet been verified against a live wiki.
+> **Status: early.** `pull`, `status`, `diff` and `push` previews work, and have
+> been run against Appropedia. **`push --apply` (publishing) is experimental:** it
+> is tested against a real MediaWiki 1.45 in CI on every change, but not yet
+> against Appropedia itself
+> ([#12](https://github.com/CameronBrooks11/wikisync/issues/12)).
 
 ## Why
 
@@ -45,7 +47,7 @@ wikisync diff --dir ./pages
 wikisync push --dir ./pages
 
 # Publish, authenticated as your account (requires a bot password + a summary).
-# Experimental: not yet verified against a live wiki.
+# Experimental: tested against MediaWiki 1.45 in CI, not yet against Appropedia.
 export WIKISYNC_USERNAME_APPROPEDIA='You@botname'
 export WIKISYNC_PASSWORD_APPROPEDIA='…'   # a MediaWiki bot password, never your login
 wikisync push --dir ./pages --apply --summary "Fix typos"
