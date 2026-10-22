@@ -31,10 +31,18 @@ check: fmt-check lint
 test:
     go test -race ./...
 
-# Live push round-trip against a real wiki (opt-in; writes to and restores a page).
-# Needs WIKISYNC_TEST_PAGE + WIKISYNC_USERNAME + WIKISYNC_PASSWORD in the env.
+[doc("Push round-trip against a throwaway MediaWiki in Docker (what CI runs)")]
 test-integration:
-    go test -tags integration -run TestLivePushRoundTrip -v ./internal/core/
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'scripts/test-wiki.sh down' EXIT
+    exports=$(scripts/test-wiki.sh up) # a failed setup stops here
+    eval "$exports"
+    WIKISYNC_REQUIRE_INTEGRATION=1 go test -tags integration -run TestLivePushRoundTrip -count=1 -v ./internal/core/
+
+[doc("Push round-trip against a real wiki; needs WIKISYNC_TEST_PAGE, WIKISYNC_USERNAME, WIKISYNC_PASSWORD")]
+test-live:
+    WIKISYNC_REQUIRE_INTEGRATION=1 go test -tags integration -run TestLivePushRoundTrip -count=1 -v ./internal/core/
 
 # Build the binary into bin/
 build:

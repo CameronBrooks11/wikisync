@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -145,6 +146,18 @@ func TestEditSuccessWithoutRevisionIsAnError(t *testing.T) {
 
 	if _, err := testClient(srv).Edit("A", "x", "s", 1); err == nil {
 		t.Fatal("want an error when success carries neither newrevid nor nochange")
+	}
+}
+
+func TestFetchPageReportsAPIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"error":{"code":"readapidenied","info":"You need read permission."}}`)
+	}))
+	defer srv.Close()
+
+	_, err := testClient(srv).FetchPage("A")
+	if err == nil || !strings.Contains(err.Error(), "readapidenied") {
+		t.Fatalf("err = %v, want the API's error code", err)
 	}
 }
 
