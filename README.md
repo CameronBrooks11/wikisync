@@ -59,6 +59,23 @@ recorded at pull time and never contact the wiki. `pull` keeps metadata in
 `.wikisync/baselines/<pageid>.wiki`, which is what `diff` compares against. Pass
 `--force` to `pull` to overwrite local files that have unpulled changes.
 
+Each page is a `.wiki` file laid out like the wiki itself. Namespaces become
+folders and subpages become subfolders, and spaces become underscores:
+
+```
+Welcome_to_Appropedia.wiki             Welcome to Appropedia
+User/CameronBrooks11/wikisync.wiki     User:CameronBrooks11/wikisync
+User_talk/Example.wiki                 User talk:Example
+```
+
+Characters that aren't safe in filenames are percent-encoded (`?` becomes
+`%3F`). A title that can't be laid out safely as folders, such as one containing
+`..` or an empty segment, becomes a single file with its slashes encoded, so
+nothing is ever written outside the folder you pulled into. A page you pulled
+before keeps the path it already has. If two pages would map to the same file
+(for example `User:foo` and a main-namespace page `User/foo`), the second is
+refused rather than overwriting the first.
+
 `push` is preview-by-default and safe: it only writes with `--apply`, refuses
 pages whose wiki revision moved past your baseline (re-pull to resolve), skips
 unchanged pages, never deletes or creates remote pages (it only edits pages that

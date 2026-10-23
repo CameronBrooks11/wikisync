@@ -88,7 +88,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 			continue
 		}
 
-		localPath := filepath.Join(root, entry.File)
+		localPath := filepath.Join(root, filepath.FromSlash(entry.File))
 		data, err := os.ReadFile(localPath)
 		if err != nil {
 			// A missing/unreadable local file is never translated into a remote delete.

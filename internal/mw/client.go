@@ -19,6 +19,7 @@ type FetchedPage struct {
 	Text   string
 	RevID  int64
 	PageID int64
+	NS     int // namespace number (0 is the main namespace)
 	Exists bool
 }
 
@@ -86,6 +87,7 @@ type apiResponse struct {
 	Query struct {
 		Pages []struct {
 			PageID    int64  `json:"pageid"`
+			NS        int    `json:"ns"`
 			Title     string `json:"title"`
 			Missing   bool   `json:"missing"`
 			Revisions []struct {
@@ -145,6 +147,7 @@ func (c *Client) FetchPage(title string) (FetchedPage, error) {
 		Text:   rev.Slots.Main.Content,
 		RevID:  rev.RevID,
 		PageID: page.PageID,
+		NS:     page.NS,
 		Exists: true,
 	}, nil
 }

@@ -13,7 +13,7 @@ func testClient(srv *httptest.Server) *Client {
 }
 
 func TestFetchPageReadsRevisionAndPageID(t *testing.T) {
-	const body = `{"query":{"pages":[{"pageid":5,"title":"Water Pump",` +
+	const body = `{"query":{"pages":[{"pageid":5,"ns":2,"title":"Water Pump",` +
 		`"revisions":[{"revid":99,"slots":{"main":{"content":"hello\n"}}}]}]}}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +31,7 @@ func TestFetchPageReadsRevisionAndPageID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := FetchedPage{Title: "Water Pump", Text: "hello\n", RevID: 99, PageID: 5, Exists: true}
+	want := FetchedPage{Title: "Water Pump", Text: "hello\n", RevID: 99, PageID: 5, NS: 2, Exists: true}
 	if got != want {
 		t.Errorf("FetchPage = %+v, want %+v", got, want)
 	}
