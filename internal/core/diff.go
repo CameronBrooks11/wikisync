@@ -68,7 +68,7 @@ func Diff(root string, titles []string) ([]PageDiff, error) {
 			results = append(results, PageDiff{Title: title, State: NoBaseline})
 			continue
 		}
-		dest := filepath.Join(root, entry.File)
+		dest := filepath.Join(root, filepath.FromSlash(entry.File))
 		if !fileExists(dest) {
 			results = append(results, PageDiff{Title: title, State: DiffDeleted})
 			continue

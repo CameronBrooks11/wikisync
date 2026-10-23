@@ -34,7 +34,7 @@ func Status(root string) ([]StatusItem, error) {
 	}
 	items := make([]StatusItem, 0, len(m.Entries))
 	for title, entry := range m.Entries {
-		dest := filepath.Join(root, entry.File)
+		dest := filepath.Join(root, filepath.FromSlash(entry.File))
 		var state State
 		switch {
 		case !fileExists(dest):

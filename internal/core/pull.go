@@ -11,21 +11,60 @@ import (
 	"github.com/CameronBrooks11/wikisync/internal/store"
 )
 
-// TitleToFilename maps a wiki title to a collision-safe, reversible .wiki name.
+// PagePath maps a page to its path in the working tree, relative to the root
+// and slash-separated:
 //
-// Spaces become underscores (MediaWiki treats the two as the same title) and
-// every other unsafe character is percent-encoded, so distinct titles such as
-// "Foo/Bar" and "Foo-Bar" map to distinct files.
-func TitleToFilename(title string) string {
+//	Water Pump                     -> Water_Pump.wiki
+//	User:CameronBrooks11/wikisync  -> User/CameronBrooks11/wikisync.wiki
+//	User talk:X                    -> User_talk/X.wiki
+//
+// A page outside the main namespace (ns != 0) goes in a folder named after its
+// namespace, and subpage slashes become subfolders. Spaces become underscores
+// (MediaWiki treats the two as the same title), and characters unsafe in
+// filenames are percent-encoded within each segment, so distinct titles map to
+// distinct paths.
+//
+// The title comes from the wiki, so the path is checked before use: if any
+// segment would be empty, "." or "..", the page gets a single flat name with
+// every slash encoded instead, which cannot leave the working tree.
+func PagePath(title string, ns int) string {
+	title = strings.ReplaceAll(title, " ", "_")
+	folder, rest := "", title
+	if ns != 0 {
+		if i := strings.Index(title, ":"); i > 0 {
+			folder, rest = title[:i], title[i+1:]
+		}
+	}
+
+	var parts []string
+	if folder != "" {
+		parts = append(parts, encodeSegment(folder)) // e.g. "smw/schema" -> "smw%2Fschema"
+	}
+	parts = append(parts, strings.Split(rest, "/")...)
+	for i, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return encodeSegment(title) + ".wiki"
+		}
+		if i > 0 || folder == "" {
+			parts[i] = encodeSegment(part)
+		}
+	}
+	// Every segment is now non-empty, not "." or "..", and has its slashes,
+	// backslashes and colons encoded, so the joined path stays in the tree.
+	return strings.Join(parts, "/") + ".wiki"
+}
+
+// encodeSegment percent-encodes the characters that are unsafe in a filename,
+// including "/" and "%" itself, so the result is a single reversible segment.
+func encodeSegment(s string) string {
 	var b strings.Builder
-	for _, r := range strings.ReplaceAll(title, " ", "_") {
+	for _, r := range s {
 		if isUnsafe(r) {
 			fmt.Fprintf(&b, "%%%02X", r)
 		} else {
 			b.WriteRune(r)
 		}
 	}
-	b.WriteString(".wiki")
 	return b.String()
 }
 
@@ -80,20 +119,26 @@ func Pull(titles []string, fetch FetchFunc, root, host, path string, force bool)
 			continue
 		}
 
-		filename := TitleToFilename(page.Title)
-		dest := filepath.Join(root, filename)
+		entry, tracked := m.Entries[page.Title]
+		filename := PagePath(page.Title, page.NS)
+		if tracked && entry.File != "" {
+			filename = entry.File // a page already pulled keeps its path
+		}
+		dest := filepath.Join(root, filepath.FromSlash(filename))
 
 		if owner := filenameOwner(m, filename, page.Title); owner != "" {
 			rep.Collisions = append(rep.Collisions, Collision{Title: page.Title, File: filename, Owner: owner})
 			continue
 		}
 
-		entry, tracked := m.Entries[page.Title]
 		if fileExists(dest) && !force && !isClean(dest, entry, tracked) {
 			rep.SkippedDirty = append(rep.SkippedDirty, page.Title)
 			continue
 		}
 
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return nil, err
+		}
 		if err := os.WriteFile(dest, []byte(page.Text), 0o644); err != nil {
 			return nil, err
 		}

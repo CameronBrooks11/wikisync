@@ -69,6 +69,10 @@ just run -- ...    # go run . ...
 - The `.wikisync/` on-disk format is language-agnostic and versioned
   (`store.CurrentVersion`); bump it and handle old manifests when it changes.
 - Keep `status` and `diff` offline; only `pull`/`push` touch the network.
+- Working-tree paths come from `core.PagePath` (namespace folder, subpage
+  subfolders). Titles come from a remote wiki, so keep its segment check: no
+  title may yield a path outside the working tree. Manifest `File` values are
+  slash-separated; join them with `filepath.FromSlash`.
 - Conventional Commits.
 
 ## Constraints

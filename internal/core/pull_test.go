@@ -46,20 +46,120 @@ func mustRead(t *testing.T, path string) string {
 
 // --- tests ---
 
-func TestTitleToFilename(t *testing.T) {
-	cases := map[string]string{
-		"Open Source Water Pump": "Open_Source_Water_Pump.wiki",
-		"Foo/Bar":                "Foo%2FBar.wiki",
-		"Foo-Bar":                "Foo-Bar.wiki",
-		"A B":                    "A_B.wiki",
+func TestPagePath(t *testing.T) {
+	cases := []struct {
+		title string
+		ns    int
+		want  string
+	}{
+		{"Open Source Water Pump", 0, "Open_Source_Water_Pump.wiki"},
+		{"User:CameronBrooks11/wikisync", 2, "User/CameronBrooks11/wikisync.wiki"},
+		{"User:CameronBrooks11", 2, "User/CameronBrooks11.wiki"},
+		{"User talk:X", 3, "User_talk/X.wiki"},
+		{"Foo/Bar", 0, "Foo/Bar.wiki"}, // main-namespace subpage
+		{"Foo-Bar", 0, "Foo-Bar.wiki"},
+		{"Help:A: B?", 12, "Help/A%3A_B%3F.wiki"},            // only the first colon is the namespace
+		{"Notes: draft", 0, "Notes%3A_draft.wiki"},           // main namespace: a colon is just a character
+		{"smw/schema:Thing", 112, "smw%2Fschema/Thing.wiki"}, // a namespace name with a slash stays one folder
+		{"100%", 0, "100%25.wiki"},
 	}
-	for in, want := range cases {
-		if got := TitleToFilename(in); got != want {
-			t.Errorf("TitleToFilename(%q) = %q, want %q", in, got, want)
+	for _, c := range cases {
+		if got := PagePath(c.title, c.ns); got != c.want {
+			t.Errorf("PagePath(%q, %d) = %q, want %q", c.title, c.ns, got, c.want)
 		}
 	}
-	if TitleToFilename("Foo/Bar") == TitleToFilename("Foo-Bar") {
-		t.Error("distinct titles must not collide")
+}
+
+// Titles come from a remote wiki; no title may produce a path outside the
+// working tree. Anything that would falls back to one flat, encoded name.
+func TestPagePathStaysInsideTheTree(t *testing.T) {
+	cases := []struct {
+		title string
+		ns    int
+		want  string
+	}{
+		{"../../etc/passwd", 0, "..%2F..%2Fetc%2Fpasswd.wiki"},
+		{"A/../B", 0, "A%2F..%2FB.wiki"},
+		{"A/./B", 0, "A%2F.%2FB.wiki"},
+		{"A//B", 0, "A%2F%2FB.wiki"},
+		{"A/", 0, "A%2F.wiki"},
+		{"/A", 0, "%2FA.wiki"},
+		{"..:x", 2, "..%3Ax.wiki"}, // a namespace named ".."
+		{"User:..", 2, "User%3A...wiki"},
+	}
+	for _, c := range cases {
+		got := PagePath(c.title, c.ns)
+		if got != c.want {
+			t.Errorf("PagePath(%q, %d) = %q, want %q", c.title, c.ns, got, c.want)
+		}
+		if !filepath.IsLocal(filepath.FromSlash(got)) {
+			t.Errorf("PagePath(%q, %d) = %q escapes the working tree", c.title, c.ns, got)
+		}
+	}
+}
+
+func TestPullWritesNamespacedPageIntoFolders(t *testing.T) {
+	dir := t.TempDir()
+	p := page("User:CameronBrooks11/wikisync", "hello\n", 7, 1)
+	p.NS = 2
+	rep := mustPull(t, []string{p.Title}, fakeFetch(map[string]mw.FetchedPage{p.Title: p}), dir, false)
+
+	if len(rep.Written) != 1 || rep.Written[0].File != "User/CameronBrooks11/wikisync.wiki" {
+		t.Fatalf("written = %+v", rep.Written)
+	}
+	if got := mustRead(t, filepath.Join(dir, "User", "CameronBrooks11", "wikisync.wiki")); got != "hello\n" {
+		t.Errorf("file = %q", got)
+	}
+	items, err := Status(dir)
+	if err != nil || len(items) != 1 || items[0].State != Unchanged {
+		t.Errorf("status = %+v, %v", items, err)
+	}
+}
+
+// A page pulled under the old flat layout keeps its recorded path on re-pull,
+// so nothing moves under the user.
+func TestPullKeepsTrackedPagePath(t *testing.T) {
+	dir := t.TempDir()
+	const old = "User%3AX.wiki"
+	m := &store.Manifest{Version: store.CurrentVersion, Entries: map[string]store.Entry{
+		"User:X": {Title: "User:X", File: old, RevID: 1, Host: "h", Path: "/w/",
+			SHA256: store.ContentHash("v1"), PageID: 3},
+	}}
+	if err := m.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(dir, old), "v1")
+
+	p := page("User:X", "v2", 3, 2)
+	p.NS = 2
+	rep := mustPull(t, []string{"User:X"}, fakeFetch(map[string]mw.FetchedPage{"User:X": p}), dir, false)
+
+	if len(rep.Written) != 1 || rep.Written[0].File != old {
+		t.Fatalf("written = %+v, want the recorded path %q", rep.Written, old)
+	}
+	if got := mustRead(t, filepath.Join(dir, old)); got != "v2" {
+		t.Errorf("file = %q", got)
+	}
+	if fileExists(filepath.Join(dir, "User", "X.wiki")) {
+		t.Error("a second copy was written at the new layout's path")
+	}
+}
+
+// A main-namespace subpage and a namespaced page can map to the same path; the
+// second one is refused rather than overwriting the first.
+func TestPullRefusesLayoutCollision(t *testing.T) {
+	dir := t.TempDir()
+	main := page("User/foo", "main ns\n", 1, 1)
+	user := page("User:foo", "user ns\n", 2, 1)
+	user.NS = 2
+	rep := mustPull(t, []string{"User/foo", "User:foo"},
+		fakeFetch(map[string]mw.FetchedPage{"User/foo": main, "User:foo": user}), dir, false)
+
+	if len(rep.Written) != 1 || len(rep.Collisions) != 1 || rep.Collisions[0].Owner != "User/foo" {
+		t.Fatalf("rep = %+v", rep)
+	}
+	if got := mustRead(t, filepath.Join(dir, "User", "foo.wiki")); got != "main ns\n" {
+		t.Errorf("first page was overwritten: %q", got)
 	}
 }
 
