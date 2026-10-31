@@ -16,6 +16,12 @@ baseline) and `push` (preview by default; `--apply` publishes) are implemented.
 `status` and `diff` are offline; `pull` and `push` touch the network. Baselines
 live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 
+`pull` selects pages through `core.PullSet`: explicit titles, `--category`,
+`--prefix`, or (with none) every tracked page. Listed pages carry their page
+language, so translations are dropped before the `--max` cap and before any text
+is fetched; texts come in batches of 50 (`mw.FetchPages`). Per-page writing,
+dirty-file and collision checks stay in `core.Pull`.
+
 `push` logs in with a bot password, read per wiki from
 `WIKISYNC_USERNAME_<WIKI>`/`WIKISYNC_PASSWORD_<WIKI>` (`<WIKI>` derived from the
 host by `internal/creds`, e.g. `APPROPEDIA`), falling back to

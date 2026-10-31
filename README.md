@@ -34,6 +34,13 @@ Flags come before page titles.
 # Fetch pages to local .wiki files (default wiki: appropedia.org)
 wikisync pull --dir ./pages "Welcome to Appropedia"
 
+# ...or a whole set: a category, or every page under a prefix
+wikisync pull --dir ./pages --category "Simple living"
+wikisync pull --dir ./pages --prefix "User:You/"
+
+# Later: pull every page you're tracking again
+wikisync pull --dir ./pages
+
 # Edit the .wiki files with any tools, then classify what changed since the pull
 wikisync status --dir ./pages
 # -> modified  Welcome to Appropedia (Welcome_to_Appropedia.wiki)
@@ -49,6 +56,13 @@ export WIKISYNC_USERNAME_APPROPEDIA='You@botname'
 export WIKISYNC_PASSWORD_APPROPEDIA='…'   # a MediaWiki bot password, never your login
 wikisync push --dir ./pages --apply --summary "Fix typos"
 ```
+
+`--category` and `--prefix` can be repeated and combined with page titles. They
+pull only pages in the wiki's own language: on Appropedia, many category members
+are machine translations (`Page/es`, `Page/ar`, …), which are skipped unless you
+pass `--all-languages`. A page you name explicitly is always pulled. A selection
+larger than 500 pages is refused before anything is downloaded; raise the limit
+with `--max`. Subcategories aren't followed. Pages are fetched 50 per request.
 
 `status` and `diff` are local only — they compare each file against the revision
 recorded at pull time and never contact the wiki. `pull` keeps metadata in
