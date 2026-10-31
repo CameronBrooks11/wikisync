@@ -155,3 +155,65 @@ func TestFetchPagesBatchesAndMapsTitles(t *testing.T) {
 		t.Errorf("Ghost = %+v, want missing", p)
 	}
 }
+
+// Over MediaWiki's response size limit, a batch comes back with some pages'
+// revisions left out and a "continue" to fetch them; those pages exist.
+func TestFetchPagesFollowsTruncatedBatch(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		_ = r.ParseForm()
+		rev := func(id int, text string) string {
+			return fmt.Sprintf(`"revisions":[{"revid":%d,"slots":{"main":{"content":%q}}}]`, id, text)
+		}
+		if r.FormValue("rvcontinue") == "" {
+			_, _ = io.WriteString(w, `{"continue":{"rvcontinue":"2|20","continue":"||"},"query":{"pages":[`+
+				`{"pageid":1,"ns":0,"title":"Big A",`+rev(10, "a")+`},`+
+				`{"pageid":2,"ns":0,"title":"Big B"},`+
+				`{"pageid":3,"ns":0,"title":"Big C"}]}}`)
+			return
+		}
+		if r.FormValue("rvcontinue") != "2|20" || r.FormValue("continue") != "||" {
+			t.Errorf("continuation sent %v", r.PostForm)
+		}
+		_, _ = io.WriteString(w, `{"query":{"pages":[`+
+			`{"pageid":1,"ns":0,"title":"Big A"},`+
+			`{"pageid":2,"ns":0,"title":"Big B",`+rev(20, "b")+`},`+
+			`{"pageid":3,"ns":0,"title":"Big C",`+rev(30, "c")+`}]}}`)
+	}))
+	defer srv.Close()
+
+	got, err := testClient(srv).FetchPages([]string{"Big A", "Big B", "Big C"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for title, want := range map[string]string{"Big A": "a", "Big B": "b", "Big C": "c"} {
+		if p := got[title]; !p.Exists || p.Text != want {
+			t.Errorf("%s = %+v, want text %q", title, p, want)
+		}
+	}
+	if requests != 2 {
+		t.Errorf("requests = %d, want 2", requests)
+	}
+}
+
+// A continuation that brings no new revisions is an error, not a loop.
+func TestFetchPagesStopsOnStalledContinuation(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests > 2 { // stop a looping client so the test fails rather than hangs
+			_, _ = io.WriteString(w, `{"error":{"code":"looped","info":"too many requests"}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"continue":{"rvcontinue":"1|10","continue":"||"},"query":{"pages":[{"pageid":1,"ns":0,"title":"Huge"}]}}`)
+	}))
+	defer srv.Close()
+
+	if _, err := testClient(srv).FetchPages([]string{"Huge"}); err == nil {
+		t.Fatal("want an error for a continuation that never delivers the page")
+	}
+	if requests > 2 {
+		t.Errorf("requests = %d, want it to give up after one fruitless continuation", requests)
+	}
+}
