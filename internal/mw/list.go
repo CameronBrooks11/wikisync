@@ -219,8 +219,43 @@ func (c *Client) FetchPages(titles []string) (map[string]FetchedPage, error) {
 }
 
 func (c *Client) fetchBatch(batch []string, result map[string]FetchedPage) error {
-	// POST: fifty long titles can exceed a URL length limit.
-	resp, err := c.post(url.Values{
+	byTitle := map[string]FetchedPage{}
+	normalized := map[string]string{}
+	cont := map[string]string{}
+	for {
+		next, added, err := c.fetchBatchOnce(batch, cont, byTitle, normalized)
+		if err != nil {
+			return err
+		}
+		if len(next) == 0 {
+			break
+		}
+		// Over the response size limit, MediaWiki leaves some pages' revisions
+		// out and says where to continue; each round must deliver some.
+		if added == 0 && len(cont) > 0 {
+			return fmt.Errorf("mediawiki api: a continued request returned no page text")
+		}
+		cont = next
+	}
+	for _, requested := range batch {
+		key := requested
+		if to, ok := normalized[requested]; ok {
+			key = to
+		}
+		page, ok := byTitle[key]
+		if !ok {
+			page = FetchedPage{Title: requested, Exists: false}
+		}
+		result[requested] = page
+	}
+	return nil
+}
+
+// fetchBatchOnce makes one request for batch (continuing from cont), records
+// pages with text or known to be missing in byTitle, and returns the next
+// continuation and how many pages gained their text.
+func (c *Client) fetchBatchOnce(batch []string, cont map[string]string, byTitle map[string]FetchedPage, normalized map[string]string) (map[string]string, int, error) {
+	params := url.Values{
 		"action":        {"query"},
 		"prop":          {"revisions"},
 		"titles":        {strings.Join(batch, "|")},
@@ -228,18 +263,24 @@ func (c *Client) fetchBatch(batch []string, result map[string]FetchedPage) error
 		"rvslots":       {"main"},
 		"format":        {"json"},
 		"formatversion": {"2"},
-	})
+	}
+	for k, v := range cont {
+		params.Set(k, v)
+	}
+	// POST: fifty long titles can exceed a URL length limit.
+	resp, err := c.post(params)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("mediawiki api: %s", resp.Status)
+		return nil, 0, fmt.Errorf("mediawiki api: %s", resp.Status)
 	}
 
 	var out struct {
-		Error *apiError `json:"error"`
-		Query struct {
+		Error    *apiError         `json:"error"`
+		Continue map[string]string `json:"continue"`
+		Query    struct {
 			Normalized []struct {
 				From string `json:"from"`
 				To   string `json:"to"`
@@ -262,42 +303,34 @@ func (c *Client) fetchBatch(batch []string, result map[string]FetchedPage) error
 		} `json:"query"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return err
+		return nil, 0, err
 	}
 	if out.Error != nil {
-		return out.Error
+		return nil, 0, out.Error
 	}
 
-	byTitle := map[string]FetchedPage{}
-	for _, p := range out.Query.Pages {
-		if p.Missing || p.Invalid || len(p.Revisions) == 0 {
-			byTitle[p.Title] = FetchedPage{Title: p.Title, Exists: false}
-			continue
-		}
-		rev := p.Revisions[0]
-		byTitle[p.Title] = FetchedPage{
-			Title:  p.Title,
-			Text:   rev.Slots.Main.Content,
-			RevID:  rev.RevID,
-			PageID: p.PageID,
-			NS:     p.NS,
-			Exists: true,
-		}
-	}
-	normalized := map[string]string{}
 	for _, n := range out.Query.Normalized {
 		normalized[n.From] = n.To
 	}
-	for _, requested := range batch {
-		key := requested
-		if to, ok := normalized[requested]; ok {
-			key = to
+	added := 0
+	for _, p := range out.Query.Pages {
+		switch {
+		case p.Missing || p.Invalid:
+			byTitle[p.Title] = FetchedPage{Title: p.Title, Exists: false}
+		case len(p.Revisions) > 0:
+			if _, done := byTitle[p.Title]; !done {
+				added++
+			}
+			rev := p.Revisions[0]
+			byTitle[p.Title] = FetchedPage{
+				Title:  p.Title,
+				Text:   rev.Slots.Main.Content,
+				RevID:  rev.RevID,
+				PageID: p.PageID,
+				NS:     p.NS,
+				Exists: true,
+			}
 		}
-		page, ok := byTitle[key]
-		if !ok {
-			page = FetchedPage{Title: requested, Exists: false}
-		}
-		result[requested] = page
 	}
-	return nil
+	return out.Continue, added, nil
 }
