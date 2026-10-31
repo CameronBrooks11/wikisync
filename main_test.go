@@ -35,7 +35,7 @@ func TestRun(t *testing.T) {
 		{"no args prints usage", []string{}, 0},
 		{"version", []string{"--version"}, 0},
 		{"unknown command", []string{"bogus"}, 2},
-		{"pull needs a title", []string{"pull"}, 2},
+		{"pull with nothing named or tracked", []string{"pull", "--dir", t.TempDir()}, 2},
 		{"status on empty dir", []string{"status", "--dir", t.TempDir()}, 0},
 		{"diff on empty dir", []string{"diff", "--dir", t.TempDir()}, 0},
 		{"push preview, nothing to push", []string{"push", "--dir", t.TempDir()}, 0},

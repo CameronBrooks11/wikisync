@@ -29,6 +29,8 @@ type Client struct {
 	HTTP      *http.Client
 	APIURL    string
 	UserAgent string
+
+	site *Site // siteinfo, fetched once (see SiteInfo)
 }
 
 // APIURL builds the api.php endpoint, e.g.

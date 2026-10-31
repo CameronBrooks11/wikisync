@@ -5,9 +5,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/CameronBrooks11/wikisync/internal/core"
 	"github.com/CameronBrooks11/wikisync/internal/creds"
@@ -58,7 +60,9 @@ func printUsage() {
 	fmt.Print(`wikisync — work with MediaWiki/Appropedia pages locally
 
 Usage:
-  wikisync pull   [--host H] [--path P] [--dir D] [--force] PAGE [PAGE ...]
+  wikisync pull   [--host H] [--path P] [--dir D] [--force]
+                  [--category C]... [--prefix P]... [--all-languages] [--max N]
+                  [PAGE ...]          (nothing named: pull every tracked page again)
   wikisync status [--dir D]
   wikisync diff   [--dir D] [PAGE ...]
   wikisync push   [--host H] [--path P] [--dir D] [--apply] [--summary S] [PAGE ...]
@@ -74,18 +78,24 @@ WIKISYNC_PASSWORD.
 `)
 }
 
+// stringList is a repeatable string flag.
+type stringList []string
+
+func (s *stringList) String() string     { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
+
 func cmdPull(args []string) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
 	host := fs.String("host", defaultHost, "wiki host")
 	path := fs.String("path", defaultPath, "API script path")
 	dir := fs.String("dir", ".", "directory to write files into")
 	force := fs.Bool("force", false, "overwrite local files even if they have unpulled changes")
+	var categories, prefixes stringList
+	fs.Var(&categories, "category", "pull the pages in this category (repeatable)")
+	fs.Var(&prefixes, "prefix", `pull the pages whose title starts with this, e.g. "User:You/" (repeatable)`)
+	allLanguages := fs.Bool("all-languages", false, "with --category/--prefix, also pull pages in other languages (e.g. translations)")
+	maxPages := fs.Int("max", 500, "refuse a --category/--prefix selection larger than this")
 	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	titles := fs.Args()
-	if len(titles) == 0 {
-		fmt.Fprintln(os.Stderr, "wikisync pull: need at least one page title")
 		return 2
 	}
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
@@ -93,11 +103,29 @@ func cmdPull(args []string) int {
 		return 1
 	}
 
+	sel := core.Selection{
+		Titles:       fs.Args(),
+		Categories:   categories,
+		Prefixes:     prefixes,
+		AllLanguages: *allLanguages,
+		Max:          *maxPages,
+	}
 	client := mw.NewClient(*host, *path, userAgent())
-	rep, err := core.Pull(titles, client.FetchPage, *dir, *host, *path, *force)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "wikisync pull: could not reach %s: %v\n", *host, err)
+	rep, err := core.PullSet(sel, client, client.FetchPages, *dir, *host, *path, *force)
+	var tooMany *core.TooManyError
+	switch {
+	case errors.Is(err, core.ErrNothingToPull):
+		fmt.Fprintf(os.Stderr, "wikisync pull: %v\n", err)
+		return 2
+	case errors.As(err, &tooMany):
+		fmt.Fprintf(os.Stderr, "wikisync pull: %v\n", err)
 		return 1
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "wikisync pull: %s: %v\n", *host, err)
+		return 1
+	}
+	if rep.Refreshed {
+		fmt.Fprintf(os.Stderr, "pulling the %d tracked pages again\n", len(rep.Written)+len(rep.Missing)+len(rep.SkippedDirty)+len(rep.Collisions))
 	}
 	for _, w := range rep.Written {
 		fmt.Printf("pulled %q -> %s\n", w.Title, w.File)
@@ -110,6 +138,12 @@ func cmdPull(args []string) int {
 	}
 	for _, c := range rep.Collisions {
 		fmt.Fprintf(os.Stderr, "skipped %q: filename %q is already used by %q\n", c.Title, c.File, c.Owner)
+	}
+	if n := len(rep.SkippedLanguage); n > 0 {
+		fmt.Fprintf(os.Stderr, "skipped %d pages in other languages, such as translations (use --all-languages to include them)\n", n)
+	}
+	if len(rep.Written) == 0 && len(rep.Missing) == 0 && len(rep.SkippedDirty) == 0 && len(rep.Collisions) == 0 {
+		fmt.Fprintln(os.Stderr, "no pages matched")
 	}
 	if len(rep.SkippedDirty) > 0 || len(rep.Collisions) > 0 || len(rep.Written) == 0 {
 		return 1
