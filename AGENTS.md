@@ -44,18 +44,19 @@ the Docker socket; in that case CI is the runner for `test-integration`.
 ## Stack
 
 - **Language** — Go 1.23+.
-- **Dependencies** — standard library for the read client; `go-difflib` for
-  unified diffs. No MediaWiki client library yet (the read path is plain
-  HTTP+JSON); `push` will add one for auth/edit tokens.
+- **Dependencies** — standard library for the MediaWiki client (reads, login,
+  edits: plain HTTP+JSON with a cookie jar); `go-difflib` for unified diffs.
 - **Tooling** — `gofmt`, `golangci-lint`, `go vet`, `go test -race`.
 
 ## Layout
 
 ```
 main.go              CLI: flag parsing and dispatch
-internal/mw/         MediaWiki API read client
+internal/mw/         MediaWiki API client: pages, listings, login, edit
 internal/store/      manifest + baseline snapshots (.wikisync/)
-internal/core/       pull, status, diff
+internal/core/       pull (and page selection), status, diff, push, paths
+internal/creds/      per-wiki bot-password lookup from the environment
+scripts/test-wiki.sh throwaway MediaWiki in Docker for test-integration
 ```
 
 ## Commands
@@ -65,6 +66,8 @@ just setup        # go mod download + install golangci-lint
 just fmt          # gofmt -w
 just check        # fmt-check + lint + vet (CI-equivalent)
 just test         # go test -race ./...
+just test-integration  # push round-trip vs throwaway MediaWiki in Docker
+just test-live    # same vs a real wiki's designated test page (never CI)
 just build        # build ./bin/wikisync
 just run -- ...    # go run . ...
 ```
@@ -86,8 +89,8 @@ just run -- ...    # go run . ...
 - **Pushing edits writes to a live, public wiki under a real user.** Treat every
   write path as ask-first: explicit, dry-run-able, never run by default. Reads
   are unauthenticated and safe.
-- **Auth is a credential.** When `push` lands, read a bot password or OAuth token
-  from the environment or a secret manager — never hardcode, commit, or log it.
+- **Auth is a credential.** `push` reads a bot password from the environment
+  (`internal/creds`) — never hardcode, commit, or log it.
 - Identify the client to the API with an honest `User-Agent`; no personal email.
 - Do not add dependencies without justification.
 - Do not add AI attribution to commits or PR descriptions.
