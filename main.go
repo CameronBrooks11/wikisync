@@ -1,4 +1,4 @@
-// Command wikisync works with MediaWiki/Appropedia pages locally: pull pages as
+// Command wikisync works with MediaWiki pages locally: pull pages as
 // wikitext, see what changed, and push edits back.
 //
 // Flags precede positional arguments, e.g. `wikisync pull --dir ./pages "Title"`.
@@ -18,7 +18,6 @@ import (
 
 const (
 	version     = "0.2.1"
-	defaultHost = "www.appropedia.org"
 	defaultPath = "/w/"
 )
 
@@ -57,7 +56,7 @@ func run(args []string) int {
 }
 
 func printUsage() {
-	fmt.Print(`wikisync — work with MediaWiki/Appropedia pages locally
+	fmt.Print(`wikisync — work with MediaWiki pages locally
 
 Usage:
   wikisync pull   [--host H] [--path P] [--dir D] [--force]
@@ -68,14 +67,32 @@ Usage:
   wikisync push   [--host H] [--path P] [--dir D] [--apply] [--summary S] [PAGE ...]
 
 Flags precede page titles, e.g.:
-  wikisync pull --dir ./pages "Welcome to Appropedia"
+  wikisync pull --host wiki.example.org --dir ./pages "Main Page"
+
+The first pull into a directory needs --host (and --path if api.php isn't
+under /w/). After that the directory remembers its wiki, so later pulls and
+pushes there don't need either.
 
 push previews by default; --apply publishes and needs a MediaWiki bot password
 plus --summary. Credentials are read from WIKISYNC_USERNAME_<WIKI> and
 WIKISYNC_PASSWORD_<WIKI>, where <WIKI> comes from the host
-(www.appropedia.org -> APPROPEDIA), else from WIKISYNC_USERNAME and
+(wiki.example.org -> EXAMPLE), else from WIKISYNC_USERNAME and
 WIKISYNC_PASSWORD.
 `)
+}
+
+// newClient builds the API client; tests replace it to see which wiki a
+// command connects to.
+var newClient = mw.NewClient
+
+// wikiErrExit is the exit code for a ResolveWiki error: 2 when the command was
+// given the wrong or no wiki, 1 when the working tree couldn't be read.
+func wikiErrExit(err error) int {
+	var mismatch *core.WikiMismatchError
+	if errors.Is(err, core.ErrNoHost) || errors.Is(err, core.ErrNothingToPull) || errors.As(err, &mismatch) {
+		return 2
+	}
+	return 1
 }
 
 // stringList is a repeatable string flag.
@@ -86,8 +103,8 @@ func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
 
 func cmdPull(args []string) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
-	host := fs.String("host", defaultHost, "wiki host")
-	path := fs.String("path", defaultPath, "API script path")
+	host := fs.String("host", "", "wiki host, e.g. wiki.example.org (needed for the first pull into --dir)")
+	path := fs.String("path", "", "directory holding api.php (default "+defaultPath+")")
 	dir := fs.String("dir", ".", "directory to write files into")
 	force := fs.Bool("force", false, "overwrite local files even if they have unpulled changes")
 	var categories, prefixes stringList
@@ -97,6 +114,14 @@ func cmdPull(args []string) int {
 	maxPages := fs.Int("max", 500, "refuse a --category/--prefix selection larger than this")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	wikiHost, wikiPath, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
+	if err != nil {
+		if errors.Is(err, core.ErrNoHost) && fs.NArg() == 0 && len(categories) == 0 && len(prefixes) == 0 {
+			err = core.ErrNothingToPull
+		}
+		fmt.Fprintf(os.Stderr, "wikisync pull: %v\n", err)
+		return wikiErrExit(err)
 	}
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "wikisync pull: %v\n", err)
@@ -110,8 +135,8 @@ func cmdPull(args []string) int {
 		AllLanguages: *allLanguages,
 		Max:          *maxPages,
 	}
-	client := mw.NewClient(*host, *path, userAgent())
-	rep, err := core.PullSet(sel, client, client.FetchPages, *dir, *host, *path, *force)
+	client := newClient(wikiHost, wikiPath, userAgent())
+	rep, err := core.PullSet(sel, client, client.FetchPages, *dir, wikiHost, wikiPath, *force)
 	var tooMany *core.TooManyError
 	switch {
 	case errors.Is(err, core.ErrNothingToPull):
@@ -121,7 +146,7 @@ func cmdPull(args []string) int {
 		fmt.Fprintf(os.Stderr, "wikisync pull: %v\n", err)
 		return 1
 	case err != nil:
-		fmt.Fprintf(os.Stderr, "wikisync pull: %s: %v\n", *host, err)
+		fmt.Fprintf(os.Stderr, "wikisync pull: %s: %v\n", wikiHost, err)
 		return 1
 	}
 	if rep.Refreshed {
@@ -218,8 +243,8 @@ func cmdDiff(args []string) int {
 
 func cmdPush(args []string) int {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
-	host := fs.String("host", defaultHost, "wiki host")
-	path := fs.String("path", defaultPath, "API script path")
+	host := fs.String("host", "", "wiki host, e.g. wiki.example.org (needed for the first pull into --dir)")
+	path := fs.String("path", "", "directory holding api.php (default "+defaultPath+")")
 	dir := fs.String("dir", ".", "directory holding the pulled files")
 	apply := fs.Bool("apply", false, "actually publish edits (default: preview only)")
 	summary := fs.String("summary", "", "edit summary (required with --apply)")
@@ -231,16 +256,25 @@ func cmdPush(args []string) int {
 		selected = titles
 	}
 
-	client := mw.NewClient(*host, *path, userAgent())
+	if *apply && *summary == "" {
+		fmt.Fprintln(os.Stderr, "wikisync push --apply: --summary is required")
+		return 2
+	}
+	wikiHost, wikiPath, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
+	if errors.Is(err, core.ErrNoHost) { // nothing tracked, so nothing to push
+		fmt.Println("no local changes to push")
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "wikisync push: %v\n", err)
+		return wikiErrExit(err)
+	}
+	client := newClient(wikiHost, wikiPath, userAgent())
 
 	if *apply {
-		if *summary == "" {
-			fmt.Fprintln(os.Stderr, "wikisync push --apply: --summary is required")
-			return 2
-		}
-		c, ok := creds.Lookup(*host, os.Getenv)
+		c, ok := creds.Lookup(wikiHost, os.Getenv)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "wikisync push --apply: set %s (a MediaWiki bot password)\n", creds.Hint(*host))
+			fmt.Fprintf(os.Stderr, "wikisync push --apply: set %s (a MediaWiki bot password)\n", creds.Hint(wikiHost))
 			return 2
 		}
 		fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)

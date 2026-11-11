@@ -21,21 +21,22 @@ wikisync --version
 
 ## Pull a page
 
-wikisync talks to Appropedia unless you pass `--host` and `--path` (see
-[Commands](commands.md#wikis-other-than-appropedia)). Pull a page into a new
-folder:
+The first pull into a folder names the wiki with `--host`:
 
 ```sh
-wikisync pull --dir ./pages "Welcome to Appropedia"
-# pulled "Welcome to Appropedia" -> Welcome_to_Appropedia.wiki
+wikisync pull --host wiki.example.org --dir ./pages "Main Page"
+# pulled "Main Page" -> Main_Page.wiki
 ```
 
-Flags always come before page titles.
+If the wiki's `api.php` isn't under `/w/`, also pass `--path` (see
+[Commands](commands.md#choosing-the-wiki)). From then on the folder remembers
+its wiki, so later commands in it need neither flag. Flags always come before
+page titles.
 
-To pull a set of pages instead, name a category or a title prefix:
+To pull a set of pages, name a category or a title prefix:
 
 ```sh
-wikisync pull --dir ./pages --category "Simple living"
+wikisync pull --dir ./pages --category "Recipes"
 wikisync pull --dir ./pages --prefix "User:You/"
 ```
 
@@ -45,7 +46,7 @@ Edit the `.wiki` files however you like. Then see what changed:
 
 ```sh
 wikisync status --dir ./pages
-# modified         Welcome to Appropedia (Welcome_to_Appropedia.wiki)
+# modified         Main Page (Main_Page.wiki)
 
 wikisync diff --dir ./pages
 ```
@@ -60,18 +61,18 @@ nothing:
 
 ```sh
 wikisync push --dir ./pages
-# would push "Welcome to Appropedia"
+# would push "Main Page"
 ```
 
 To publish, you need a MediaWiki bot password (see [Credentials](credentials.md))
 and an edit summary:
 
 ```sh
-export WIKISYNC_USERNAME_APPROPEDIA='You@wikisync'
-export WIKISYNC_PASSWORD_APPROPEDIA='…'
-wikisync push --dir ./pages --apply --summary "Fix typos" "Welcome to Appropedia"
-# logging in as You@wikisync (from WIKISYNC_USERNAME_APPROPEDIA)
-# pushed "Welcome to Appropedia" (now rev 1234567)
+export WIKISYNC_USERNAME_EXAMPLE='You@wikisync'
+export WIKISYNC_PASSWORD_EXAMPLE='…'
+wikisync push --dir ./pages --apply --summary "Fix typos" "Main Page"
+# logging in as You@wikisync (from WIKISYNC_USERNAME_EXAMPLE)
+# pushed "Main Page" (now rev 1234567)
 ```
 
 Name the pages you mean to publish, as above; with no titles, `push` takes
