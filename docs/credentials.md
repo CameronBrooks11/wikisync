@@ -9,8 +9,8 @@ MediaWiki bot passwords are separate passwords for your account, limited to the
 permissions you choose and revocable at any time. Edits made with one are
 ordinary edits by your account.
 
-1. Log in to the wiki and open `Special:BotPasswords`
-   (on Appropedia: <https://www.appropedia.org/Special:BotPasswords>).
+1. Log in to the wiki and open its `Special:BotPasswords` page
+   (for example `https://wiki.example.org/wiki/Special:BotPasswords`).
 2. Enter a name for the bot password, such as `wikisync`, and create it.
 3. Grant **Edit existing pages**. wikisync needs nothing else: it never creates,
    moves or deletes pages.
@@ -22,16 +22,16 @@ ordinary edits by your account.
 wikisync reads the pair for the wiki you're pushing to:
 
 ```sh
-export WIKISYNC_USERNAME_APPROPEDIA='YourName@wikisync'
-export WIKISYNC_PASSWORD_APPROPEDIA='…'
+export WIKISYNC_USERNAME_EXAMPLE='YourName@wikisync'
+export WIKISYNC_PASSWORD_EXAMPLE='…'
 ```
 
 The suffix comes from the host: the label before the top-level domain,
 uppercased, with anything other than letters and digits turned into `_`.
 
-| `--host` | Variables |
+| Wiki host | Variables |
 |---|---|
-| `www.appropedia.org` | `WIKISYNC_USERNAME_APPROPEDIA`, `WIKISYNC_PASSWORD_APPROPEDIA` |
+| `wiki.example.org` | `WIKISYNC_USERNAME_EXAMPLE`, `WIKISYNC_PASSWORD_EXAMPLE` |
 | `en.wikipedia.org` | `WIKISYNC_USERNAME_WIKIPEDIA`, `WIKISYNC_PASSWORD_WIKIPEDIA` |
 | `wiki.my-lab.net` | `WIKISYNC_USERNAME_MY_LAB`, `WIKISYNC_PASSWORD_MY_LAB` |
 

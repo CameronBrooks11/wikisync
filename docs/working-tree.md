@@ -5,7 +5,7 @@ page, plus a `.wikisync/` folder that records what you pulled.
 
 ```
 pages/
-├── Welcome_to_Appropedia.wiki        Welcome to Appropedia
+├── Main_Page.wiki                    Main Page
 ├── Simple_living/
 │   └── Rural_Architecture.wiki       Simple living/Rural Architecture
 ├── User/
@@ -50,7 +50,7 @@ your editor to leave `*.wiki` files alone.
       "title": "User:You/notes",
       "file": "User/You/notes.wiki",
       "revid": 1292640,
-      "host": "www.appropedia.org",
+      "host": "wiki.example.org",
       "path": "/w/",
       "sha256": "…",
       "pageid": 146465
@@ -59,8 +59,10 @@ your editor to leave `*.wiki` files alone.
 }
 ```
 
-`revid` is the revision you pulled or last pushed, and `sha256` is the hash of
-that text, which is how `status` spots changes without the network.
+`host` and `path` are the tree's wiki: later commands in the folder use them,
+and refuse a different `--host`. `revid` is the revision you pulled or last
+pushed, and `sha256` is the hash of that text, which is how `status` spots
+changes without the network.
 
 `baselines/<pageid>.wiki` holds that text itself. `diff` compares against it,
 and `push` uses it to tell an edited file from an unedited one.

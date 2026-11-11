@@ -10,7 +10,7 @@
 set -euo pipefail
 
 name=wikisync-test-wiki
-image=mediawiki:1.45.6 # Appropedia runs 1.45.x
+image=mediawiki:1.45.6 # a current MediaWiki release
 port=${WIKISYNC_TEST_PORT:-8080}
 server="http://127.0.0.1:$port"
 api="$server/api.php"

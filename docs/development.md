@@ -43,8 +43,8 @@ no secrets and never touches a real wiki.
 aside for testing, never at real content:
 
 ```sh
-export WIKISYNC_TEST_PAGE='User:You/wikisync-test'
-export WIKISYNC_USERNAME_APPROPEDIA='You@wikisync' WIKISYNC_PASSWORD_APPROPEDIA='…'
+export WIKISYNC_TEST_HOST='wiki.example.org' WIKISYNC_TEST_PAGE='User:You/wikisync-test'
+export WIKISYNC_USERNAME_EXAMPLE='You@wikisync' WIKISYNC_PASSWORD_EXAMPLE='…'
 just test-live
 ```
 

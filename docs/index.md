@@ -1,7 +1,6 @@
 # wikisync
 
-wikisync copies pages from a MediaWiki wiki (such as
-[Appropedia](https://www.appropedia.org)) into local `.wiki` files, so you can
+wikisync copies pages from any MediaWiki wiki into local `.wiki` files, so you can
 edit them with the tools you already use: an editor, `grep`, scripts, an LLM,
 cross-page search, or work offline. When you're done it shows you exactly what
 changed and pushes the edits back under your own account.

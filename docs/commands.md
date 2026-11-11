@@ -99,17 +99,22 @@ Output: `pushed "Title" (now rev N)`, `would push "Title"`, or a `conflict`,
 |---|---|
 | 0 | Success. For `pull`, at least one page was written; pages that don't exist on the wiki are reported but don't fail the run. |
 | 1 | Something needs attention: `pull` skipped a page with local changes or a clashing file name, wrote nothing, or exceeded `--max`; `push` hit a conflict or error; or the wiki or a file couldn't be read. |
-| 2 | Usage: an unknown command or flag, `pull` with nothing named and nothing tracked, or `push --apply` without `--summary` or credentials. |
+| 2 | Usage: an unknown command or flag; `pull` with nothing named and nothing tracked; a first `pull` without `--host`; a `--host` or `--path` different from the working tree's wiki; or `push --apply` without `--summary` or credentials. |
 
-## Wikis other than Appropedia
+## Choosing the wiki
 
 wikisync works with any MediaWiki site over HTTPS. `--host` is the host name
 and `--path` is the directory that holds `api.php` (default `/w/`, the usual
-MediaWiki layout):
+MediaWiki layout).
 
-```sh
-wikisync pull --host en.wikipedia.org --path /w/ --dir ./wp "Sandbox"
-```
+A working tree belongs to one wiki:
 
-Pass the same `--host` and `--path` to `push`. wikisync identifies itself to
+- The first `pull` into an empty `--dir` needs `--host`:
+  `wikisync pull --host wiki.example.org --dir ./pages "Main Page"`.
+- After that, `pull` and `push` in that folder use the wiki recorded in
+  `.wikisync/manifest.json`; you don't pass `--host` or `--path` again.
+- Passing a different `--host` or `--path` there is refused. Use a separate
+  `--dir` for each wiki.
+
+wikisync identifies itself to
 the wiki with a `User-Agent` of `wikisync/<version>` and this project's URL.

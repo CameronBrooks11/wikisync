@@ -34,7 +34,7 @@ type Client struct {
 }
 
 // APIURL builds the api.php endpoint, e.g.
-// ("https", "www.appropedia.org", "/w/") -> "https://www.appropedia.org/w/api.php".
+// ("https", "wiki.example.org", "/w/") -> "https://wiki.example.org/w/api.php".
 func APIURL(scheme, host, path string) string {
 	return scheme + "://" + host + path + "api.php"
 }

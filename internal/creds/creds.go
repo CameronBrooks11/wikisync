@@ -11,12 +11,12 @@ import (
 type Credentials struct {
 	Username string
 	Password string
-	Source   string // the username variable's name, e.g. WIKISYNC_USERNAME_APPROPEDIA
+	Source   string // the username variable's name, e.g. WIKISYNC_USERNAME_EXAMPLE
 }
 
 // WikiKey derives the per-wiki suffix from a host: the label before the
 // top-level domain, uppercased, with anything outside A-Z and 0-9 turned into
-// "_". "www.appropedia.org" -> "APPROPEDIA". A bare IP address has no key.
+// "_". "wiki.example.org" -> "EXAMPLE". A bare IP address has no key.
 // Hosts under a two-part suffix (e.g. example.co.uk) get the wrong label; use
 // the generic variable names for those.
 func WikiKey(host string) string {

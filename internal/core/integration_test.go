@@ -6,9 +6,9 @@
 //	WIKISYNC_TEST_PAGE      page title to edit (use a designated test page)
 //	WIKISYNC_USERNAME[_<WIKI>], WIKISYNC_PASSWORD[_<WIKI>]
 //	                        bot-password credentials, looked up as push does
-//	                        (<WIKI> from the host, e.g. APPROPEDIA)
-//	WIKISYNC_TEST_API_URL   optional full api.php URL (e.g. a local test wiki)
-//	WIKISYNC_TEST_HOST      optional, default www.appropedia.org (https)
+//	                        (<WIKI> from the host, e.g. EXAMPLE)
+//	WIKISYNC_TEST_HOST      the wiki's host (https), e.g. wiki.example.org
+//	WIKISYNC_TEST_API_URL   or instead a full api.php URL (e.g. a local test wiki)
 //	WIKISYNC_TEST_PATH      optional, default /w/
 //	WIKISYNC_REQUIRE_INTEGRATION  when set, missing config fails instead of skipping
 //
@@ -47,7 +47,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	stamp := time.Now().UnixNano()
 	const ua = "wikisync-integration-test (+https://github.com/CameronBrooks11/wikisync)"
 
-	host := envOr("WIKISYNC_TEST_HOST", "www.appropedia.org")
+	host := os.Getenv("WIKISYNC_TEST_HOST")
 	path := envOr("WIKISYNC_TEST_PATH", "/w/")
 	client := mw.NewClient(host, path, ua)
 	if apiURL := os.Getenv("WIKISYNC_TEST_API_URL"); apiURL != "" {
@@ -62,8 +62,8 @@ func TestLivePushRoundTrip(t *testing.T) {
 	// Credentials are found the same way push finds them.
 	page := os.Getenv("WIKISYNC_TEST_PAGE")
 	c, haveCreds := creds.Lookup(host, os.Getenv)
-	if page == "" || !haveCreds {
-		msg := "set WIKISYNC_TEST_PAGE and " + creds.Hint(host) + " to run"
+	if host == "" || page == "" || !haveCreds {
+		msg := "set WIKISYNC_TEST_HOST (or WIKISYNC_TEST_API_URL), WIKISYNC_TEST_PAGE and " + creds.Hint(host) + " to run"
 		if os.Getenv("WIKISYNC_REQUIRE_INTEGRATION") != "" {
 			t.Fatal(msg) // a required run must not pass by skipping
 		}

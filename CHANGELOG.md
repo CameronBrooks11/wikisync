@@ -7,6 +7,20 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+### Changed
+
+- **No default wiki.** wikisync no longer assumes Appropedia. The first `pull`
+  into an empty folder needs `--host` (and `--path` if `api.php` isn't under
+  `/w/`). After that, `pull` and `push` in the folder use the wiki recorded in
+  its manifest, and refuse a different `--host` or `--path`.
+
+  Existing working trees already record their wiki, so they keep working
+  without `--host`. Only a first pull into a new folder changes:
+  `wikisync pull --dir ./pages "Page"` becomes
+  `wikisync pull --host www.appropedia.org --dir ./pages "Page"`.
+- `just test-live` needs `WIKISYNC_TEST_HOST`; it no longer defaults to
+  Appropedia.
+
 ### Added
 
 - Documentation in `docs/`, published at

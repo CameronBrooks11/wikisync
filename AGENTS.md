@@ -4,7 +4,7 @@ Instructions for AI coding agents working in this repository.
 
 ## Project
 
-`wikisync` is a CLI for working with MediaWiki pages (e.g. Appropedia) locally:
+`wikisync` is a CLI for working with MediaWiki pages locally:
 pull one or many pages as local wikitext files, edit them with any tools (editor,
 grep, LLMs, cross-page analysis, offline), review a diff, then push the edits back
 under your own authenticated account. Git is the analogy, not the transport — the
@@ -13,7 +13,9 @@ transport is the MediaWiki JSON API.
 Status: `pull` (fetch pages, snapshot a baseline, record it in the manifest),
 `status` (local change classification), `diff` (local unified diff vs the
 baseline) and `push` (preview by default; `--apply` publishes) are implemented.
-`status` and `diff` are offline; `pull` and `push` touch the network. Baselines
+`status` and `diff` are offline; `pull` and `push` touch the network. There is
+no default wiki: the first pull into a tree needs `--host`, and the tree then
+remembers its wiki in the manifest (`core.ResolveWiki`). Baselines
 live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 
 `pull` selects pages through `core.PullSet`: explicit titles, `--category`,
@@ -24,7 +26,7 @@ dirty-file and collision checks stay in `core.Pull`.
 
 `push` logs in with a bot password, read per wiki from
 `WIKISYNC_USERNAME_<WIKI>`/`WIKISYNC_PASSWORD_<WIKI>` (`<WIKI>` derived from the
-host by `internal/creds`, e.g. `APPROPEDIA`), falling back to
+host by `internal/creds`, e.g. `EXAMPLE`), falling back to
 `WIKISYNC_USERNAME`/`WIKISYNC_PASSWORD`,
 passes `baserevid` for server-side conflict detection, refuses pages whose remote
 revision moved past the baseline, skips unchanged pages, never deletes remote
