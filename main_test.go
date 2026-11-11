@@ -109,3 +109,48 @@ func TestCommandsUseTheTreesWiki(t *testing.T) {
 		}
 	}
 }
+
+// cleanTree returns a working tree tracking one page whose file matches its
+// baseline, so push has nothing to do for it.
+func cleanTree(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	const text = "unchanged\n"
+	if err := os.WriteFile(dir+"/Page.wiki", []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteBaseline(dir, 1, text); err != nil {
+		t.Fatal(err)
+	}
+	m := &store.Manifest{Version: store.CurrentVersion, Entries: map[string]store.Entry{
+		"Page": {Title: "Page", File: "Page.wiki", Host: "wiki.example.org", Path: "/w/",
+			RevID: 1, PageID: 1, SHA256: store.ContentHash(text)},
+	}}
+	if err := m.Save(dir); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// A title push can't find must not look like a run with nothing to do (#24).
+func TestPushReportsUntrackedTitles(t *testing.T) {
+	fakeWiki(t)
+	cases := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"tracked page, nothing changed", []string{"push", "--dir", cleanTree(t), "Page"}, 0},
+		{"typo in a tracked tree", []string{"push", "--dir", cleanTree(t), "Pgae"}, 1},
+		{"typo alongside a tracked page", []string{"push", "--dir", cleanTree(t), "Page", "Pgae"}, 1},
+		{"title in an empty tree", []string{"push", "--dir", t.TempDir(), "Page"}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			silence(t)
+			if got := run(tc.args); got != tc.want {
+				t.Errorf("run(%v) = %d, want %d", tc.args, got, tc.want)
+			}
+		})
+	}
+}

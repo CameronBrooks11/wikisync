@@ -7,6 +7,12 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+### Fixed
+
+- `push` reports a title that isn't tracked and exits 1. It used to ignore it
+  and print "no local changes to push", so a mistyped title looked like a run
+  with nothing to publish. (#24)
+
 ## [0.3.0] - 2026-11-11
 
 ### Changed
