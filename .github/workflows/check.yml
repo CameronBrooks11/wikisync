@@ -47,6 +47,10 @@ jobs:
           cache: true
       - uses: ./.github/actions/setup-just
       - name: Install golangci-lint
+        # golangci-lint needs a newer Go than go.mod's minimum, which setup-go
+        # (v6+) pins with GOTOOLCHAIN=local; let this one build fetch it.
+        env:
+          GOTOOLCHAIN: auto
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
       - name: Put GOPATH/bin on PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
