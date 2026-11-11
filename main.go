@@ -95,6 +95,23 @@ func wikiErrExit(err error) int {
 	return 1
 }
 
+// reportUntracked names each title push was asked for but has no result for,
+// because it isn't tracked, and reports whether there were any.
+func reportUntracked(titles []string, results []core.PushResult) bool {
+	found := map[string]bool{}
+	for _, r := range results {
+		found[r.Title] = true
+	}
+	missing := false
+	for _, t := range titles {
+		if !found[t] {
+			fmt.Fprintf(os.Stderr, "push: %q is not tracked (run 'wikisync pull' first)\n", t)
+			missing = true
+		}
+	}
+	return missing
+}
+
 // stringList is a repeatable string flag.
 type stringList []string
 
@@ -262,6 +279,9 @@ func cmdPush(args []string) int {
 	}
 	wikiHost, wikiPath, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
 	if errors.Is(err, core.ErrNoHost) { // nothing tracked, so nothing to push
+		if reportUntracked(selected, nil) {
+			return 1
+		}
 		fmt.Println("no local changes to push")
 		return 0
 	}
@@ -291,6 +311,9 @@ func cmdPush(args []string) int {
 	}
 
 	exit := 0
+	if reportUntracked(selected, results) {
+		exit = 1
+	}
 	actionable := false
 	for _, r := range results {
 		switch r.Action {

@@ -16,8 +16,8 @@ flag after the first title is read as a title.
 
 `--dir` is the working tree (default: the current directory). `pull` accepts
 titles with spaces or underscores (`Water Pump` or `Water_Pump`). `diff` and
-`push` match titles exactly as `status` lists them; `push` ignores a title that
-isn't tracked, so check the spelling against `status`.
+`push` match titles exactly as `status` lists them, and report a title that
+isn't tracked.
 
 ## pull
 
@@ -98,7 +98,7 @@ Output: `pushed "Title" (now rev N)`, `would push "Title"`, or a `conflict`,
 | Code | When |
 |---|---|
 | 0 | Success. For `pull`, at least one page was written; pages that don't exist on the wiki are reported but don't fail the run. |
-| 1 | Something needs attention: `pull` skipped a page with local changes or a clashing file name, wrote nothing, or exceeded `--max`; `push` hit a conflict or error; or the wiki or a file couldn't be read. |
+| 1 | Something needs attention: `pull` skipped a page with local changes or a clashing file name, wrote nothing, or exceeded `--max`; `push` hit a conflict or error, or was given a title that isn't tracked; or the wiki or a file couldn't be read. |
 | 2 | Usage: an unknown command or flag; `pull` with nothing named and nothing tracked; a first `pull` without `--host`; a `--host` or `--path` different from the working tree's wiki; or `push --apply` without `--summary` or credentials. |
 
 ## Choosing the wiki
