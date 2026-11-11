@@ -57,6 +57,7 @@ internal/store/      manifest + baseline snapshots (.wikisync/)
 internal/core/       pull (and page selection), status, diff, push, paths
 internal/creds/      per-wiki bot-password lookup from the environment
 scripts/test-wiki.sh throwaway MediaWiki in Docker for test-integration
+docs/                user docs, published to GitHub Pages by pages.yml
 ```
 
 ## Commands
@@ -83,6 +84,9 @@ just run -- ...    # go run . ...
   title may yield a path outside the working tree. Manifest `File` values are
   slash-separated; join them with `filepath.FromSlash`.
 - Conventional Commits.
+- `docs/` is the user documentation (and the Pages site). A change to a flag,
+  output, exit code or on-disk format updates the matching page in the same PR,
+  and user-visible changes get a line under `Unreleased` in `CHANGELOG.md`.
 
 ## Constraints
 

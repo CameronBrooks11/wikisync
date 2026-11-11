@@ -1,0 +1,11 @@
+title: wikisync
+description: Pull MediaWiki pages to local files, edit them with your own tools, review the diff, and push the changes back.
+theme: minima
+repository: CameronBrooks11/wikisync
+
+header_pages:
+  - getting-started.md
+  - commands.md
+  - credentials.md
+  - working-tree.md
+  - development.md
