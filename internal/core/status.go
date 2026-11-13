@@ -13,10 +13,10 @@ import (
 type State string
 
 const (
-	Unchanged       State = "unchanged"
-	Modified        State = "modified"
-	Deleted         State = "deleted"
-	BaselineUnknown State = "baseline-unknown"
+	StatusUnchanged       State = "unchanged"
+	StatusModified        State = "modified"
+	StatusDeleted         State = "deleted"
+	StatusBaselineUnknown State = "baseline-unknown"
 )
 
 // StatusItem is one page's state.
@@ -41,15 +41,15 @@ func Status(root string) ([]StatusItem, error) {
 		var state State
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
-			state = Deleted
+			state = StatusDeleted
 		case entry.SHA256 == "":
-			state = BaselineUnknown
+			state = StatusBaselineUnknown
 		case err != nil:
 			return nil, err
 		case store.ContentHash(string(data)) == entry.SHA256:
-			state = Unchanged
+			state = StatusUnchanged
 		default:
-			state = Modified
+			state = StatusModified
 		}
 		items = append(items, StatusItem{Title: title, File: entry.File, State: state})
 	}

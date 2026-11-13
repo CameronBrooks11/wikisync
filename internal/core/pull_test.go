@@ -109,7 +109,7 @@ func TestPullWritesNamespacedPageIntoFolders(t *testing.T) {
 		t.Errorf("file = %q", got)
 	}
 	items, err := Status(dir)
-	if err != nil || len(items) != 1 || items[0].State != Unchanged {
+	if err != nil || len(items) != 1 || items[0].State != StatusUnchanged {
 		t.Errorf("status = %+v, %v", items, err)
 	}
 }

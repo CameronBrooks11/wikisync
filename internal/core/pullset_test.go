@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -69,18 +70,6 @@ func written(rep *SetReport) []string {
 	return titles
 }
 
-func equal(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // A category with English pages and bot translations, as on Appropedia.
 func waterWiki() (fakeLister, *fakeBatch) {
 	list := fakeLister{lang: "en", categories: map[string][]mw.ListedPage{
@@ -106,10 +95,10 @@ func TestPullSetCategorySkipsTranslations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := written(rep); !equal(got, []string{"Pump", "Still"}) {
+	if got := written(rep); !slices.Equal(got, []string{"Pump", "Still"}) {
 		t.Errorf("written = %v", got)
 	}
-	if !equal(rep.SkippedLanguage, []string{"Pump/ar", "Still/es"}) {
+	if !slices.Equal(rep.SkippedLanguage, []string{"Pump/ar", "Still/es"}) {
 		t.Errorf("skipped = %v", rep.SkippedLanguage)
 	}
 	if len(b.calls) != 1 {
@@ -135,10 +124,10 @@ func TestPullSetExplicitTitleAlwaysPulled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := written(rep); !equal(got, []string{"Still/es", "Pump", "Still"}) {
+	if got := written(rep); !slices.Equal(got, []string{"Still/es", "Pump", "Still"}) {
 		t.Errorf("written = %v", got)
 	}
-	if !equal(rep.SkippedLanguage, []string{"Pump/ar"}) {
+	if !slices.Equal(rep.SkippedLanguage, []string{"Pump/ar"}) {
 		t.Errorf("skipped = %v", rep.SkippedLanguage)
 	}
 }
@@ -192,7 +181,7 @@ func TestPullSetRefreshesTrackedPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !rep.Refreshed || !equal(written(rep), []string{"A", "B"}) {
+	if !rep.Refreshed || !slices.Equal(written(rep), []string{"A", "B"}) {
 		t.Fatalf("rep = %+v", rep)
 	}
 	m, _ := store.LoadManifest(dir)
@@ -263,10 +252,10 @@ func TestPullSetDepthFollowsSubcategories(t *testing.T) {
 		if err != nil {
 			t.Fatalf("depth %d: %v", tc.depth, err)
 		}
-		if got := written(rep); !equal(got, tc.pages) {
+		if got := written(rep); !slices.Equal(got, tc.pages) {
 			t.Errorf("depth %d: written = %v, want %v", tc.depth, got, tc.pages)
 		}
-		if !equal(*listed, tc.listed) || rep.CategoriesWalked != len(tc.listed) {
+		if !slices.Equal(*listed, tc.listed) || rep.CategoriesWalked != len(tc.listed) {
 			t.Errorf("depth %d: listed %v (walked %d), want %v", tc.depth, *listed, rep.CategoriesWalked, tc.listed)
 		}
 	}
@@ -279,7 +268,7 @@ func TestPullSetCategorySpellings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !equal(*listed, []string{"Lab"}) {
+	if !slices.Equal(*listed, []string{"Lab"}) {
 		t.Errorf("listed %v, want Lab once", *listed)
 	}
 }
@@ -301,7 +290,7 @@ func TestPullSetMaxCountsWholeTree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("4 pages under a limit of 4: %v", err)
 	}
-	if !equal(rep.SkippedLanguage, []string{"Method/es"}) {
+	if !slices.Equal(rep.SkippedLanguage, []string{"Method/es"}) {
 		t.Errorf("skipped = %v", rep.SkippedLanguage)
 	}
 }
@@ -323,10 +312,10 @@ func TestPullSetWatchlist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := written(rep); !equal(got, []string{"Pump", "Still", "User:Me"}) {
+	if got := written(rep); !slices.Equal(got, []string{"Pump", "Still", "User:Me"}) {
 		t.Errorf("written = %v", got)
 	}
-	if !equal(rep.SkippedLanguage, []string{"Pump/ar", "Still/es", "User:Me/es"}) {
+	if !slices.Equal(rep.SkippedLanguage, []string{"Pump/ar", "Still/es", "User:Me/es"}) {
 		t.Errorf("skipped = %v", rep.SkippedLanguage)
 	}
 	if rep.WatchlistMissing != 2 {

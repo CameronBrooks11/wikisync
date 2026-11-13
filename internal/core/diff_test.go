@@ -32,7 +32,7 @@ func TestDiffChanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res[0].State != Changed {
+	if res[0].State != DiffChanged {
 		t.Fatalf("state = %s", res[0].State)
 	}
 	if !strings.Contains(res[0].Text, "-line2") || !strings.Contains(res[0].Text, "+CHANGED") {
@@ -70,7 +70,7 @@ func TestDiffNoBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res[0].State != NoBaseline {
+	if res[0].State != DiffNoBaseline {
 		t.Errorf("state = %s", res[0].State)
 	}
 }

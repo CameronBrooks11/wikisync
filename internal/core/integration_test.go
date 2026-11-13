@@ -155,7 +155,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: status: %v", step, err)
 		}
-		if len(items) != 1 || items[0].State != Unchanged {
+		if len(items) != 1 || items[0].State != StatusUnchanged {
 			t.Errorf("%s: status = %+v, want unchanged", step, items)
 		}
 		return live
@@ -172,7 +172,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Action != Pushed {
+	if len(results) != 1 || results[0].Action != PushPublished {
 		t.Fatalf("push: results = %+v", results)
 	}
 	live := assertSynced("after push")
@@ -185,7 +185,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Action != SkipUnchanged {
+	if len(results) != 1 || results[0].Action != PushUnchanged {
 		t.Errorf("second push: results = %+v, want unchanged", results)
 	}
 	if again := assertSynced("after second push"); again.RevID != live.RevID {
@@ -198,7 +198,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Action == PushError || results[0].Action == Conflict {
+	if len(results) != 1 || results[0].Action == PushError || results[0].Action == PushConflict {
 		t.Errorf("whitespace-only push: results = %+v", results)
 	}
 	if after := assertSynced("after whitespace-only push"); after.RevID != live.RevID {
@@ -216,7 +216,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(results) != 1 || results[0].Action != Conflict {
+		if len(results) != 1 || results[0].Action != PushConflict {
 			t.Errorf("conflict (apply=%v): results = %+v, want conflict", apply, results)
 		}
 	}
