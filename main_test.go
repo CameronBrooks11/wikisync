@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/CameronBrooks11/wikisync/internal/mw"
@@ -211,6 +213,30 @@ func TestUntrackedTitlesAreNamed(t *testing.T) {
 	}
 }
 
+// Without credentials, pull --watchlist and push --apply name the variables
+// to set and what the bot password needs.
+func TestLoginNeedsCredentials(t *testing.T) {
+	fakeWiki(t)
+	for _, v := range []string{"WIKISYNC_USERNAME", "WIKISYNC_PASSWORD",
+		"WIKISYNC_USERNAME_EXAMPLE", "WIKISYNC_PASSWORD_EXAMPLE"} {
+		t.Setenv(v, "")
+	}
+	const vars = "WIKISYNC_USERNAME_EXAMPLE and WIKISYNC_PASSWORD_EXAMPLE (or WIKISYNC_USERNAME and WIKISYNC_PASSWORD)"
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"pull", "--dir", trackedTree(t), "--watchlist"},
+			"wikisync pull --watchlist: set " + vars + ` to a MediaWiki bot password with the "View your watchlist" grant` + "\n"},
+		{[]string{"push", "--dir", trackedTree(t), "--apply", "--summary", "s"},
+			"wikisync push --apply: set " + vars + " (a MediaWiki bot password)\n"},
+	} {
+		if code, _, stderr := capture(t, tc.args...); code != 2 || stderr != tc.want {
+			t.Errorf("%v: got %d %q, want 2 %q", tc.args[:1], code, stderr, tc.want)
+		}
+	}
+}
+
 // pull --watchlist logs in before listing, and a failed login stops the pull
 // before the watchlist is asked for.
 func TestPullWatchlistLogsInFirst(t *testing.T) {
@@ -235,13 +261,111 @@ func TestPullWatchlistLogsInFirst(t *testing.T) {
 	t.Cleanup(func() { newClient = orig })
 	t.Setenv("WIKISYNC_USERNAME_EXAMPLE", "Me@wikisync")
 	t.Setenv("WIKISYNC_PASSWORD_EXAMPLE", "secret")
-	silence(t)
-
-	args := []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--watchlist"}
-	if got := run(args); got != 1 {
-		t.Errorf("run(%v) = %d, want 1", args, got)
+	code, _, stderr := capture(t, "pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--watchlist")
+	const want = "logging in as Me@wikisync (from WIKISYNC_USERNAME_EXAMPLE)\n" +
+		"wikisync pull: login failed: login failed: Failed (bad password)\n"
+	if code != 1 || stderr != want {
+		t.Errorf("got %d %q, want 1 %q", code, stderr, want)
 	}
 	if fmt.Sprint(asked) != "[token login]" {
 		t.Errorf("requests = %v, want a login token, a login, and nothing after the failure", asked)
+	}
+}
+
+// labServer is a small wiki for pull's output: category Top holds page A, its
+// Spanish translation A/es and subcategory Sub, which holds page B; the
+// watchlist holds A and a title with no page; Ghost doesn't exist; titles
+// starting "User:" are in namespace 2. Logins succeed.
+func labServer(t *testing.T) {
+	t.Helper()
+	page := func(title, lang string, ns int) map[string]any {
+		return map[string]any{"title": title, "ns": ns, "pagelanguage": lang}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		var pages []map[string]any
+		switch f := r.Form; {
+		case f.Get("meta") == "siteinfo":
+			_, _ = io.WriteString(w, `{"query":{"general":{"lang":"en"},"namespaces":{}}}`)
+			return
+		case f.Get("meta") == "tokens":
+			_, _ = io.WriteString(w, `{"query":{"tokens":{"logintoken":"t"}}}`)
+			return
+		case f.Get("action") == "login":
+			_, _ = io.WriteString(w, `{"login":{"result":"Success"}}`)
+			return
+		case f.Get("gcmtitle") == "Category:Top":
+			pages = []map[string]any{page("A", "en", 0), page("A/es", "es", 0), page("Category:Sub", "en", 14)}
+		case f.Get("gcmtitle") == "Category:Sub":
+			pages = []map[string]any{page("B", "en", 0)}
+		case f.Get("generator") == "watchlistraw":
+			pages = []map[string]any{page("A", "en", 0), {"title": "Gone", "ns": 0, "missing": true}}
+		case f.Get("prop") == "revisions":
+			for i, title := range strings.Split(f.Get("titles"), "|") {
+				if title == "Ghost" {
+					pages = append(pages, map[string]any{"title": title, "missing": true})
+					continue
+				}
+				ns := 0
+				if strings.HasPrefix(title, "User:") {
+					ns = 2
+				}
+				pages = append(pages, map[string]any{"title": title, "ns": ns, "pageid": i + 1,
+					"revisions": []any{map[string]any{"revid": 10, "slots": map[string]any{"main": map[string]any{"content": "text of " + title + "\n"}}}}})
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"query": map[string]any{"pages": pages}})
+	}))
+	t.Cleanup(srv.Close)
+	orig := newClient
+	newClient = func(_, _, ua string) *mw.Client { return mw.NewClientForAPI(srv.URL+"/api.php", ua) }
+	t.Cleanup(func() { newClient = orig })
+}
+
+// pull's report: one line per outcome, and exit 1 when anything was skipped
+// or nothing was pulled.
+func TestPullOutput(t *testing.T) {
+	labServer(t)
+	t.Setenv("WIKISYNC_USERNAME_EXAMPLE", "Me@wikisync")
+	t.Setenv("WIKISYNC_PASSWORD_EXAMPLE", "secret")
+	dir := t.TempDir()
+	steps := []struct {
+		name           string
+		args           []string
+		edit           string // file in dir to change before the step
+		code           int
+		stdout, stderr string
+	}{
+		{name: "category with subcategories",
+			args:   []string{"pull", "--host", "wiki.example.org", "--dir", dir, "--category", "Top", "--depth", "1"},
+			stdout: `pulled "A" -> A.wiki` + "\n" + `pulled "B" -> B.wiki` + "\n",
+			stderr: "walked 2 categories (depth 1)\n" +
+				"skipped 1 pages in other languages, such as translations (use --all-languages to include them)\n"},
+		{name: "refresh with a local edit", args: []string{"pull", "--dir", dir}, edit: "A.wiki", code: 1,
+			stdout: `pulled "B" -> B.wiki` + "\n",
+			stderr: "pulling the 2 tracked pages again\n" +
+				`skipped "A": local file has unpulled changes (use --force to overwrite)` + "\n"},
+		{name: "a page that doesn't exist", args: []string{"pull", "--dir", dir, "Ghost"}, code: 1,
+			stderr: `skipped "Ghost": page does not exist` + "\n"},
+		{name: "two titles, one filename", args: []string{"pull", "--dir", dir, "User/X", "User:X"}, code: 1,
+			stdout: `pulled "User/X" -> User/X.wiki` + "\n",
+			stderr: `skipped "User:X": filename "User/X.wiki" is already used by "User/X"` + "\n"},
+		{name: "watchlist", args: []string{"pull", "--dir", dir, "--force", "--watchlist"},
+			stdout: `pulled "A" -> A.wiki` + "\n",
+			stderr: "logging in as Me@wikisync (from WIKISYNC_USERNAME_EXAMPLE)\n" +
+				"skipped 1 watched pages that don't exist\n"},
+		{name: "empty selection", args: []string{"pull", "--dir", dir, "--category", "Empty"}, code: 1,
+			stderr: "no pages matched\n"},
+	}
+	for _, s := range steps {
+		if s.edit != "" {
+			if err := os.WriteFile(dir+"/"+s.edit, []byte("local edit\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		code, stdout, stderr := capture(t, s.args...)
+		if code != s.code || stdout != s.stdout || stderr != s.stderr {
+			t.Errorf("%s:\n got %d %q %q\nwant %d %q %q", s.name, code, stdout, stderr, s.code, s.stdout, s.stderr)
+		}
 	}
 }

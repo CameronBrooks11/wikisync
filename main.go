@@ -105,6 +105,23 @@ func reportUntracked(cmd string, untracked []string) bool {
 	return len(untracked) > 0
 }
 
+// login logs client in with host's bot password for `wikisync cmd flag`,
+// and returns the exit code when it can't: 2 with no credentials (want says
+// what kind of bot password to set), 1 when the wiki refuses them.
+func login(client *mw.Client, host, cmd, flag, want string) int {
+	c, ok := creds.Lookup(host, os.Getenv)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "wikisync %s %s: set %s %s\n", cmd, flag, creds.Hint(host), want)
+		return 2
+	}
+	fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)
+	if err := client.Login(c.Username, c.Password); err != nil {
+		fmt.Fprintf(os.Stderr, "wikisync %s: login failed: %v\n", cmd, err)
+		return 1
+	}
+	return 0
+}
+
 // stringList is a repeatable string flag.
 type stringList []string
 
@@ -159,15 +176,9 @@ func cmdPull(args []string) int {
 	}
 	client := newClient(wiki.Host, wiki.Path, userAgent())
 	if *watchlist {
-		c, ok := creds.Lookup(wiki.Host, os.Getenv)
-		if !ok {
-			fmt.Fprintf(os.Stderr, "wikisync pull --watchlist: set %s to a MediaWiki bot password with the \"View your watchlist\" grant\n", creds.Hint(wiki.Host))
-			return 2
-		}
-		fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)
-		if err := client.Login(c.Username, c.Password); err != nil {
-			fmt.Fprintf(os.Stderr, "wikisync pull: login failed: %v\n", err)
-			return 1
+		const want = `to a MediaWiki bot password with the "View your watchlist" grant`
+		if code := login(client, wiki.Host, "pull", "--watchlist", want); code != 0 {
+			return code
 		}
 	}
 	rep, err := core.PullSet(sel, client, *dir, wiki, *force)
@@ -183,11 +194,18 @@ func cmdPull(args []string) int {
 		fmt.Fprintf(os.Stderr, "wikisync pull: %s: %v\n", wiki.Host, err)
 		return 1
 	}
-	if *depth > 0 {
-		fmt.Fprintf(os.Stderr, "walked %d categories (depth %d)\n", rep.CategoriesWalked, *depth)
+	return printPullReport(rep, *depth)
+}
+
+// printPullReport prints what a pull did, and returns its exit code: 1 when
+// a page was skipped for a local edit or a filename clash, or nothing was
+// pulled.
+func printPullReport(rep *core.SetReport, depth int) int {
+	if depth > 0 {
+		fmt.Fprintf(os.Stderr, "walked %d categories (depth %d)\n", rep.CategoriesWalked, depth)
 	}
 	if rep.Refreshed {
-		fmt.Fprintf(os.Stderr, "pulling the %d tracked pages again\n", len(rep.Written)+len(rep.Missing)+len(rep.SkippedDirty)+len(rep.Collisions))
+		fmt.Fprintf(os.Stderr, "pulling the %d tracked pages again\n", rep.Total())
 	}
 	for _, w := range rep.Written {
 		fmt.Printf("pulled %q -> %s\n", w.Title, w.File)
@@ -207,7 +225,7 @@ func cmdPull(args []string) int {
 	if n := len(rep.SkippedLanguage); n > 0 {
 		fmt.Fprintf(os.Stderr, "skipped %d pages in other languages, such as translations (use --all-languages to include them)\n", n)
 	}
-	if len(rep.Written) == 0 && len(rep.Missing) == 0 && len(rep.SkippedDirty) == 0 && len(rep.Collisions) == 0 {
+	if rep.Total() == 0 {
 		fmt.Fprintln(os.Stderr, "no pages matched")
 	}
 	if len(rep.SkippedDirty) > 0 || len(rep.Collisions) > 0 || len(rep.Written) == 0 {
@@ -297,15 +315,8 @@ func cmdPush(args []string) int {
 	client := newClient(wiki.Host, wiki.Path, userAgent())
 
 	if *apply {
-		c, ok := creds.Lookup(wiki.Host, os.Getenv)
-		if !ok {
-			fmt.Fprintf(os.Stderr, "wikisync push --apply: set %s (a MediaWiki bot password)\n", creds.Hint(wiki.Host))
-			return 2
-		}
-		fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)
-		if err := client.Login(c.Username, c.Password); err != nil {
-			fmt.Fprintf(os.Stderr, "wikisync push: login failed: %v\n", err)
-			return 1
+		if code := login(client, wiki.Host, "push", "--apply", "(a MediaWiki bot password)"); code != 0 {
+			return code
 		}
 	}
 
