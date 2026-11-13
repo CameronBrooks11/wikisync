@@ -213,6 +213,30 @@ func TestUntrackedTitlesAreNamed(t *testing.T) {
 	}
 }
 
+// Without credentials, pull --watchlist and push --apply name the variables
+// to set and what the bot password needs.
+func TestLoginNeedsCredentials(t *testing.T) {
+	fakeWiki(t)
+	for _, v := range []string{"WIKISYNC_USERNAME", "WIKISYNC_PASSWORD",
+		"WIKISYNC_USERNAME_EXAMPLE", "WIKISYNC_PASSWORD_EXAMPLE"} {
+		t.Setenv(v, "")
+	}
+	const vars = "WIKISYNC_USERNAME_EXAMPLE and WIKISYNC_PASSWORD_EXAMPLE (or WIKISYNC_USERNAME and WIKISYNC_PASSWORD)"
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"pull", "--dir", trackedTree(t), "--watchlist"},
+			"wikisync pull --watchlist: set " + vars + ` to a MediaWiki bot password with the "View your watchlist" grant` + "\n"},
+		{[]string{"push", "--dir", trackedTree(t), "--apply", "--summary", "s"},
+			"wikisync push --apply: set " + vars + " (a MediaWiki bot password)\n"},
+	} {
+		if code, _, stderr := capture(t, tc.args...); code != 2 || stderr != tc.want {
+			t.Errorf("%v: got %d %q, want 2 %q", tc.args[:1], code, stderr, tc.want)
+		}
+	}
+}
+
 // pull --watchlist logs in before listing, and a failed login stops the pull
 // before the watchlist is asked for.
 func TestPullWatchlistLogsInFirst(t *testing.T) {
@@ -237,11 +261,11 @@ func TestPullWatchlistLogsInFirst(t *testing.T) {
 	t.Cleanup(func() { newClient = orig })
 	t.Setenv("WIKISYNC_USERNAME_EXAMPLE", "Me@wikisync")
 	t.Setenv("WIKISYNC_PASSWORD_EXAMPLE", "secret")
-	silence(t)
-
-	args := []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--watchlist"}
-	if got := run(args); got != 1 {
-		t.Errorf("run(%v) = %d, want 1", args, got)
+	code, _, stderr := capture(t, "pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--watchlist")
+	const want = "logging in as Me@wikisync (from WIKISYNC_USERNAME_EXAMPLE)\n" +
+		"wikisync pull: login failed: login failed: Failed (bad password)\n"
+	if code != 1 || stderr != want {
+		t.Errorf("got %d %q, want 1 %q", code, stderr, want)
 	}
 	if fmt.Sprint(asked) != "[token login]" {
 		t.Errorf("requests = %v, want a login token, a login, and nothing after the failure", asked)

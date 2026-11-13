@@ -96,6 +96,11 @@ type PullReport struct {
 	Collisions   []Collision
 }
 
+// Total is how many pages the pull reached an outcome for, of any kind.
+func (r *PullReport) Total() int {
+	return len(r.Written) + len(r.Missing) + len(r.SkippedDirty) + len(r.Collisions)
+}
+
 // Pull writes each title's fetched page (pages is keyed by the title as
 // requested; a title it lacks counts as missing) and a baseline snapshot, and
 // records them in the manifest as pulled from wiki. It refuses to overwrite a
