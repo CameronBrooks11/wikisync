@@ -18,7 +18,8 @@ no default wiki: the first pull into a tree needs `--host`, and the tree then
 remembers its wiki in the manifest (`core.ResolveWiki`). Baselines
 live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 
-`pull` selects pages through `core.PullSet`: explicit titles, `--category`,
+`pull` selects pages through `core.PullSet`: explicit titles, `--category`
+(walked `--depth` levels into subcategories, each category listed once),
 `--prefix`, or (with none) every tracked page. Listed pages carry their page
 language, so translations are dropped before the `--max` cap and before any text
 is fetched; texts come in batches of 50 (`mw.FetchPages`). Per-page writing,

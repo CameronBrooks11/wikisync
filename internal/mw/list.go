@@ -98,18 +98,33 @@ type ListedPage struct {
 	Lang  string
 }
 
-// CategoryMembers lists the pages (not subcategories or files) in a category.
-// "Water" and "Category:Water" both work.
-func (c *Client) CategoryMembers(category string) ([]ListedPage, error) {
+// categoryNS is MediaWiki's fixed namespace id for categories.
+const categoryNS = 14
+
+// CategoryMembers lists the pages in a category and, separately, the titles of
+// its subcategories (files are left out). "Water" and "Category:Water" both
+// work.
+func (c *Client) CategoryMembers(category string) (pages []ListedPage, subcats []string, err error) {
 	if !strings.HasPrefix(strings.ToLower(category), "category:") {
 		category = "Category:" + category
 	}
-	return c.listGenerator(url.Values{
+	members, err := c.listGenerator(url.Values{
 		"generator": {"categorymembers"},
 		"gcmtitle":  {category},
-		"gcmtype":   {"page"},
+		"gcmtype":   {"page|subcat"},
 		"gcmlimit":  {"max"},
 	})
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, m := range members {
+		if m.NS == categoryNS {
+			subcats = append(subcats, m.Title)
+		} else {
+			pages = append(pages, m)
+		}
+	}
+	return pages, subcats, nil
 }
 
 // PrefixPages lists the pages whose title starts with prefix, e.g.

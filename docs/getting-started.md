@@ -40,6 +40,9 @@ wikisync pull --dir ./pages --category "Recipes"
 wikisync pull --dir ./pages --prefix "User:You/"
 ```
 
+`--category` takes only the pages directly in the category. Add `--depth 1` to
+include its subcategories, `--depth 2` for theirs, and so on.
+
 ## Edit and review
 
 Edit the `.wiki` files however you like. Then see what changed:
