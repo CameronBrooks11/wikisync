@@ -161,6 +161,38 @@ func TestFetchPageReportsAPIError(t *testing.T) {
 	}
 }
 
+// A wiki that is down answers with an HTML error page; every call reports the
+// HTTP status rather than failing to parse the page as JSON.
+func TestCallsReportHTTPStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, "<html>Service Unavailable</html>")
+	}))
+	defer srv.Close()
+	c := testClient(srv)
+
+	calls := map[string]func() error{
+		"Login":     func() error { return c.Login("u", "p") },
+		"Edit":      func() error { _, err := c.Edit("A", "x", "s", 1); return err },
+		"FetchPage": func() error { _, err := c.FetchPage("A"); return err },
+		"FetchPages": func() error {
+			_, err := c.FetchPages([]string{"A"})
+			return err
+		},
+		"RevisionText": func() error { _, err := c.RevisionText(1); return err },
+		"SiteInfo":     func() error { _, err := c.SiteInfo(); return err },
+		"CategoryMembers": func() error {
+			_, _, err := c.CategoryMembers("Water")
+			return err
+		},
+	}
+	for name, call := range calls {
+		if err := call(); err == nil || !strings.Contains(err.Error(), "503") {
+			t.Errorf("%s: err = %v, want the HTTP status", name, err)
+		}
+	}
+}
+
 func TestRevisionText(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("revids"); got != "1234" {

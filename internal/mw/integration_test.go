@@ -16,8 +16,8 @@
 package mw
 
 import (
-	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -83,26 +83,16 @@ func watch(t *testing.T, c *Client, titles string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := c.post(url.Values{
-		"action": {"watch"}, "titles": {titles}, "token": {tok},
-		"format": {"json"}, "formatversion": {"2"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
 	var out struct {
-		Error *apiError `json:"error"`
 		Watch []struct {
 			Title   string `json:"title"`
 			Watched bool   `json:"watched"`
 		} `json:"watch"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatal(err)
-	}
-	if out.Error != nil {
-		t.Fatalf("watch %s: %v", titles, out.Error)
+	if err := c.call(http.MethodPost, url.Values{
+		"action": {"watch"}, "titles": {titles}, "token": {tok},
+	}, &out); err != nil {
+		t.Fatalf("watch %s: %v", titles, err)
 	}
 	if n := strings.Count(titles, "|") + 1; len(out.Watch) != n {
 		t.Fatalf("watch %s: %+v", titles, out.Watch)
