@@ -13,10 +13,13 @@ import (
 // Selection is what a pull covers. Titles named explicitly are always pulled.
 // Pages found through Categories and Prefixes are limited to the wiki's own
 // language unless AllLanguages is set, and refused if more than Max remain.
-// With nothing named and no selectors, every tracked page is pulled again.
+// Categories are followed Depth levels into their subcategories (0: the
+// category's own pages only). With nothing named and no selectors, every
+// tracked page is pulled again.
 type Selection struct {
 	Titles       []string
 	Categories   []string
+	Depth        int
 	Prefixes     []string
 	AllLanguages bool
 	Max          int
@@ -25,7 +28,7 @@ type Selection struct {
 // Lister finds pages for a selection; listed pages carry their page language.
 type Lister interface {
 	ContentLanguage() (string, error)
-	CategoryMembers(category string) ([]mw.ListedPage, error)
+	CategoryMembers(category string) (pages []mw.ListedPage, subcats []string, err error)
 	PrefixPages(prefix string) ([]mw.ListedPage, error)
 }
 
@@ -35,8 +38,9 @@ type BatchFetchFunc func(titles []string) (map[string]mw.FetchedPage, error)
 // SetReport is a PullReport plus what selection left out.
 type SetReport struct {
 	PullReport
-	SkippedLanguage []string // listed pages in another language (e.g. translations)
-	Refreshed       bool     // nothing was named, so every tracked page was pulled again
+	SkippedLanguage  []string // listed pages in another language (e.g. translations)
+	Refreshed        bool     // nothing was named, so every tracked page was pulled again
+	CategoriesWalked int      // categories listed, subcategories included
 }
 
 // ErrNothingToPull means no titles or selectors were given and nothing is tracked.
@@ -53,6 +57,56 @@ func (e *TooManyError) Error() string {
 
 // titleKey compares titles the way MediaWiki does for spaces and underscores.
 func titleKey(t string) string { return strings.ReplaceAll(t, "_", " ") }
+
+// categoryKey compares category names: "Water", "Category:Water" and
+// "category:Water" name the same category.
+func categoryKey(c string) string {
+	c = titleKey(strings.TrimSpace(c))
+	if strings.HasPrefix(strings.ToLower(c), "category:") {
+		c = strings.TrimSpace(c[len("category:"):])
+	}
+	return c
+}
+
+// categoryPages lists the pages in each category and in its subcategories down
+// to depth levels, breadth first. Categories can contain each other, and a
+// subcategory can be reached by several paths, so each is listed once. It
+// returns the pages (possibly with repeats across categories) and how many
+// categories were listed.
+func categoryPages(list Lister, roots []string, depth int) ([]mw.ListedPage, int, error) {
+	visited := map[string]bool{}
+	var level []string
+	for _, c := range roots {
+		if !visited[categoryKey(c)] {
+			visited[categoryKey(c)] = true
+			level = append(level, c)
+		}
+	}
+	var pages []mw.ListedPage
+	walked := 0
+	for d := 0; len(level) > 0; d++ {
+		var next []string
+		for _, c := range level {
+			ps, subcats, err := list.CategoryMembers(c)
+			if err != nil {
+				return nil, 0, fmt.Errorf("category %q: %w", c, err)
+			}
+			walked++
+			pages = append(pages, ps...)
+			if d == depth {
+				continue
+			}
+			for _, s := range subcats {
+				if !visited[categoryKey(s)] {
+					visited[categoryKey(s)] = true
+					next = append(next, s)
+				}
+			}
+		}
+		level = next
+	}
+	return pages, walked, nil
+}
 
 // PullSet resolves a selection, fetches its pages in batches, and pulls them
 // with Pull, so dirty files, collisions and baselines are handled the same way.
@@ -78,14 +132,11 @@ func PullSet(sel Selection, list Lister, fetch BatchFetchFunc, root, host, path 
 				return nil, err
 			}
 		}
-		var listed []mw.ListedPage
-		for _, c := range sel.Categories {
-			pages, err := list.CategoryMembers(c)
-			if err != nil {
-				return nil, fmt.Errorf("category %q: %w", c, err)
-			}
-			listed = append(listed, pages...)
+		listed, walked, err := categoryPages(list, sel.Categories, sel.Depth)
+		if err != nil {
+			return nil, err
 		}
+		rep.CategoriesWalked = walked
 		for _, p := range sel.Prefixes {
 			pages, err := list.PrefixPages(p)
 			if err != nil {

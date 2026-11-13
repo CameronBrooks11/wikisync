@@ -7,6 +7,12 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+### Added
+
+- `pull --depth N` follows `--category` into subcategories, N levels down.
+  Each category is listed once, so categories that contain each other don't
+  loop, and `--max` counts the pages of the whole tree. (#21)
+
 ## [0.3.1] - 2026-11-11
 
 ### Fixed

@@ -60,7 +60,8 @@ func printUsage() {
 
 Usage:
   wikisync pull   [--host H] [--path P] [--dir D] [--force]
-                  [--category C]... [--prefix P]... [--all-languages] [--max N]
+                  [--category C]... [--depth N] [--prefix P]...
+                  [--all-languages] [--max N]
                   [PAGE ...]          (nothing named: pull every tracked page again)
   wikisync status [--dir D]
   wikisync diff   [--dir D] [PAGE ...]
@@ -126,10 +127,19 @@ func cmdPull(args []string) int {
 	force := fs.Bool("force", false, "overwrite local files even if they have unpulled changes")
 	var categories, prefixes stringList
 	fs.Var(&categories, "category", "pull the pages in this category (repeatable)")
+	depth := fs.Int("depth", 0, "with --category, also pull the pages in subcategories this many levels down")
 	fs.Var(&prefixes, "prefix", `pull the pages whose title starts with this, e.g. "User:You/" (repeatable)`)
 	allLanguages := fs.Bool("all-languages", false, "with --category/--prefix, also pull pages in other languages (e.g. translations)")
 	maxPages := fs.Int("max", 500, "refuse a --category/--prefix selection larger than this")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	switch {
+	case *depth < 0:
+		fmt.Fprintln(os.Stderr, "wikisync pull: --depth must be 0 or more")
+		return 2
+	case *depth > 0 && len(categories) == 0:
+		fmt.Fprintln(os.Stderr, "wikisync pull: --depth needs --category")
 		return 2
 	}
 	wikiHost, wikiPath, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
@@ -148,6 +158,7 @@ func cmdPull(args []string) int {
 	sel := core.Selection{
 		Titles:       fs.Args(),
 		Categories:   categories,
+		Depth:        *depth,
 		Prefixes:     prefixes,
 		AllLanguages: *allLanguages,
 		Max:          *maxPages,
@@ -165,6 +176,9 @@ func cmdPull(args []string) int {
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "wikisync pull: %s: %v\n", wikiHost, err)
 		return 1
+	}
+	if *depth > 0 {
+		fmt.Fprintf(os.Stderr, "walked %d categories (depth %d)\n", rep.CategoriesWalked, *depth)
 	}
 	if rep.Refreshed {
 		fmt.Fprintf(os.Stderr, "pulling the %d tracked pages again\n", len(rep.Written)+len(rep.Missing)+len(rep.SkippedDirty)+len(rep.Collisions))

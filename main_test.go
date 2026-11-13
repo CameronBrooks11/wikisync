@@ -80,6 +80,9 @@ func TestRun(t *testing.T) {
 		{"pull with nothing named or tracked", []string{"pull", "--dir", t.TempDir()}, 2},
 		{"first pull needs --host", []string{"pull", "--dir", t.TempDir(), "Page"}, 2},
 		{"pull refuses another wiki", []string{"pull", "--host", "other.example.org", "--dir", trackedTree(t), "Page"}, 2},
+		{"pull --depth below 0", []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--category", "C", "--depth", "-1"}, 2},
+		{"pull --depth needs --category", []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--depth", "1", "Page"}, 2},
+		{"pull --depth with --category", []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--category", "C", "--depth", "1"}, 1}, // the fake wiki has no pages
 		{"status on empty dir", []string{"status", "--dir", t.TempDir()}, 0},
 		{"diff on empty dir", []string{"diff", "--dir", t.TempDir()}, 0},
 		{"push preview, nothing to push", []string{"push", "--dir", t.TempDir()}, 0},

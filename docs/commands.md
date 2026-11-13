@@ -2,7 +2,8 @@
 
 ```
 wikisync pull   [--host H] [--path P] [--dir D] [--force]
-                [--category C]... [--prefix P]... [--all-languages] [--max N]
+                [--category C]... [--depth N] [--prefix P]...
+                [--all-languages] [--max N]
                 [PAGE ...]
 wikisync status [--dir D]
 wikisync diff   [--dir D] [PAGE ...]
@@ -30,7 +31,7 @@ What it fetches:
 | You give | It pulls |
 |---|---|
 | Page titles | Those pages |
-| `--category C` | The pages directly in `Category:C` (subcategories aren't followed) |
+| `--category C` | The pages in `Category:C`, and with `--depth N` the pages in its subcategories N levels down |
 | `--prefix P` | Every page whose title starts with `P`, e.g. `User:You/` |
 | Nothing | Every page already tracked in `--dir`, again |
 
@@ -39,13 +40,15 @@ is pulled once.
 
 | Flag | Default | Meaning |
 |---|---|---|
+| `--depth N` | 0 | With `--category`, also pull the pages in subcategories, N levels down: 1 adds the category's direct subcategories, 2 their subcategories too. Each category is listed once, even when it's reached by several paths or the categories form a loop. Category pages themselves aren't pulled; name one to pull it. |
 | `--all-languages` | off | Also pull category and prefix members in other languages. By default only pages in the wiki's own language are kept, which skips machine translations like `Page/es`. Pages you name are always pulled. |
-| `--max N` | 500 | Refuse a category or prefix selection of more than N pages (counted after translations are dropped), before downloading anything. |
+| `--max N` | 500 | Refuse a category or prefix selection of more than N pages (counted after translations are dropped, across the whole category tree with `--depth`), before downloading anything. |
 | `--force` | off | Overwrite local files that have changes you haven't pushed. Without it, those pages are skipped and reported. |
 
 Output: one `pulled "Title" -> file` line per page on stdout; skipped pages
 (missing, unpushed local changes, a file name another page already uses) and
-the number of translations left out go to stderr.
+the number of translations left out go to stderr. With `--depth`, stderr also
+says how many categories were walked.
 
 Pages are fetched 50 to a request. Very large batches that MediaWiki splits
 across responses are followed until every page has arrived.
@@ -99,7 +102,7 @@ Output: `pushed "Title" (now rev N)`, `would push "Title"`, or a `conflict`,
 |---|---|
 | 0 | Success. For `pull`, at least one page was written; pages that don't exist on the wiki are reported but don't fail the run. |
 | 1 | Something needs attention: `pull` skipped a page with local changes or a clashing file name, wrote nothing, or exceeded `--max`; `push` hit a conflict or error, or was given a title that isn't tracked; or the wiki or a file couldn't be read. |
-| 2 | Usage: an unknown command or flag; `pull` with nothing named and nothing tracked; a first `pull` without `--host`; a `--host` or `--path` different from the working tree's wiki; or `push --apply` without `--summary` or credentials. |
+| 2 | Usage: an unknown command or flag; `pull` with nothing named and nothing tracked; a first `pull` without `--host`; `--depth` below 0 or without `--category`; a `--host` or `--path` different from the working tree's wiki; or `push --apply` without `--summary` or credentials. |
 
 ## Choosing the wiki
 

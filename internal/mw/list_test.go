@@ -38,28 +38,33 @@ func TestSiteInfoParsesAndCaches(t *testing.T) {
 	}
 }
 
-func TestCategoryMembersFollowsContinuation(t *testing.T) {
+func TestCategoryMembersSplitsSubcategories(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("gcmtitle") != "Category:Water" || q.Get("gcmtype") != "page" || q.Get("prop") != "info" {
+		if q.Get("gcmtitle") != "Category:Water" || q.Get("gcmtype") != "page|subcat" || q.Get("prop") != "info" {
 			t.Errorf("query = %v", q)
 		}
 		if q.Get("gcmcontinue") == "" {
 			_, _ = io.WriteString(w, `{"continue":{"gcmcontinue":"next","continue":"gcmcontinue||"},`+
-				`"query":{"pages":[{"title":"B","ns":0,"pagelanguage":"en"},{"title":"A/es","ns":0,"pagelanguage":"es"}]}}`)
+				`"query":{"pages":[{"title":"B","ns":0,"pagelanguage":"en"},{"title":"A/es","ns":0,"pagelanguage":"es"},`+
+				`{"title":"Category:Wells","ns":14,"pagelanguage":"en"}]}}`)
 			return
 		}
-		_, _ = io.WriteString(w, `{"query":{"pages":[{"title":"C","ns":0,"pagelanguage":"en"}]}}`)
+		_, _ = io.WriteString(w, `{"query":{"pages":[{"title":"C","ns":0,"pagelanguage":"en"},`+
+			`{"title":"Category:Pumps","ns":14,"pagelanguage":"en"}]}}`)
 	}))
 	defer srv.Close()
 
-	pages, err := testClient(srv).CategoryMembers("Water")
+	pages, subcats, err := testClient(srv).CategoryMembers("Water")
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []ListedPage{{"A/es", 0, "es"}, {"B", 0, "en"}, {"C", 0, "en"}}
 	if fmt.Sprint(pages) != fmt.Sprint(want) {
 		t.Errorf("pages = %v, want %v", pages, want)
+	}
+	if wantSub := []string{"Category:Pumps", "Category:Wells"}; fmt.Sprint(subcats) != fmt.Sprint(wantSub) {
+		t.Errorf("subcats = %v, want %v", subcats, wantSub)
 	}
 }
 

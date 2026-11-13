@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/CameronBrooks11/wikisync/internal/mw"
@@ -10,13 +11,21 @@ import (
 
 type fakeLister struct {
 	lang       string
-	categories map[string][]mw.ListedPage
+	categories map[string][]mw.ListedPage // keyed by name without "Category:"
+	subcats    map[string][]string        // keyed the same way
 	prefixes   map[string][]mw.ListedPage
+	listed     *[]string // categories listed, in order, when non-nil
 }
 
 func (f fakeLister) ContentLanguage() (string, error) { return f.lang, nil }
-func (f fakeLister) CategoryMembers(c string) ([]mw.ListedPage, error) {
-	return f.categories[c], nil
+
+// CategoryMembers accepts "Water" and "Category:Water", as MediaWiki does.
+func (f fakeLister) CategoryMembers(c string) ([]mw.ListedPage, []string, error) {
+	name := strings.TrimPrefix(c, "Category:")
+	if f.listed != nil {
+		*f.listed = append(*f.listed, name)
+	}
+	return f.categories[name], f.subcats[name], nil
 }
 func (f fakeLister) PrefixPages(p string) ([]mw.ListedPage, error) { return f.prefixes[p], nil }
 
@@ -195,5 +204,92 @@ func TestPullSetSelectorMatchingNothing(t *testing.T) {
 	}
 	if len(rep.Written) != 0 || len(b.calls) != 0 {
 		t.Errorf("rep = %+v, calls = %v", rep, b.calls)
+	}
+}
+
+// A category tree like Appropedia's: Lab has two subcategories that share a
+// third (Hardware), Hardware links back to Lab, and one page sits in two
+// categories. Subcategory names come back as "Category:…", as from the API.
+func labWiki() (fakeLister, *fakeBatch, *[]string) {
+	listed := &[]string{}
+	list := fakeLister{lang: "en", listed: listed,
+		categories: map[string][]mw.ListedPage{
+			"Lab":       {{Title: "Lab page", Lang: "en"}},
+			"Methods":   {{Title: "Method", Lang: "en"}, {Title: "Method/es", Lang: "es"}},
+			"Completed": {{Title: "Project", Lang: "en"}, {Title: "Method", Lang: "en"}},
+			"Hardware":  {{Title: "Device", Lang: "en"}},
+		},
+		subcats: map[string][]string{
+			"Lab":       {"Category:Methods", "Category:Completed"},
+			"Methods":   {"Category:Hardware"},
+			"Completed": {"Category:Hardware"},
+			"Hardware":  {"Category:Lab"},
+		},
+	}
+	b := &fakeBatch{pages: map[string]mw.FetchedPage{}}
+	for i, t := range []string{"Lab page", "Method", "Method/es", "Project", "Device"} {
+		b.pages[t] = page(t, t+"\n", int64(i+1), 1)
+	}
+	return list, b, listed
+}
+
+func TestPullSetDepthFollowsSubcategories(t *testing.T) {
+	cases := []struct {
+		depth  int
+		pages  []string
+		listed []string
+	}{
+		{0, []string{"Lab page"}, []string{"Lab"}},
+		{1, []string{"Lab page", "Method", "Project"}, []string{"Lab", "Methods", "Completed"}},
+		{2, []string{"Device", "Lab page", "Method", "Project"}, []string{"Lab", "Methods", "Completed", "Hardware"}},
+		// Hardware -> Lab is a loop: the walk ends once every category is seen.
+		{9, []string{"Device", "Lab page", "Method", "Project"}, []string{"Lab", "Methods", "Completed", "Hardware"}},
+	}
+	for _, tc := range cases {
+		list, b, listed := labWiki()
+		rep, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: tc.depth, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+		if err != nil {
+			t.Fatalf("depth %d: %v", tc.depth, err)
+		}
+		if got := written(rep); !equal(got, tc.pages) {
+			t.Errorf("depth %d: written = %v, want %v", tc.depth, got, tc.pages)
+		}
+		if !equal(*listed, tc.listed) || rep.CategoriesWalked != len(tc.listed) {
+			t.Errorf("depth %d: listed %v (walked %d), want %v", tc.depth, *listed, rep.CategoriesWalked, tc.listed)
+		}
+	}
+}
+
+// One category named twice, in different spellings, is listed once.
+func TestPullSetCategorySpellings(t *testing.T) {
+	list, b, listed := labWiki()
+	_, err := PullSet(Selection{Categories: []string{"Lab", "Category:Lab", "category:Lab"}, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !equal(*listed, []string{"Lab"}) {
+		t.Errorf("listed %v, want Lab once", *listed)
+	}
+}
+
+// The limit counts the whole tree, after translations in subcategories are
+// left out, and nothing is fetched when it is exceeded.
+func TestPullSetMaxCountsWholeTree(t *testing.T) {
+	list, b, _ := labWiki()
+	_, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: 2, Max: 3}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	var tooMany *TooManyError
+	if !errors.As(err, &tooMany) || tooMany.Count != 4 {
+		t.Fatalf("err = %v, want TooManyError counting 4 pages", err)
+	}
+	if len(b.calls) != 0 {
+		t.Error("fetched pages despite refusing the selection")
+	}
+
+	rep, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: 2, Max: 4}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	if err != nil {
+		t.Fatalf("4 pages under a limit of 4: %v", err)
+	}
+	if !equal(rep.SkippedLanguage, []string{"Method/es"}) {
+		t.Errorf("skipped = %v", rep.SkippedLanguage)
 	}
 }
