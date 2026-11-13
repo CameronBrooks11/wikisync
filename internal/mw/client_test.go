@@ -12,45 +12,51 @@ func testClient(srv *httptest.Server) *Client {
 	return &Client{HTTP: srv.Client(), APIURL: srv.URL, UserAgent: "ua"}
 }
 
-func TestFetchPageReadsRevisionAndPageID(t *testing.T) {
-	const body = `{"query":{"pages":[{"pageid":5,"ns":2,"title":"Water Pump",` +
+func TestFetchPagesReadsEveryField(t *testing.T) {
+	const body = `{"query":{"pages":[{"pageid":5,"ns":2,"title":"User:Water Pump",` +
 		`"revisions":[{"revid":99,"slots":{"main":{"content":"hello\n"}}}]}]}}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("formatversion"); got != "2" {
+		_ = r.ParseForm()
+		if got := r.FormValue("formatversion"); got != "2" {
 			t.Errorf("formatversion = %q, want 2", got)
 		}
-		if got := r.URL.Query().Get("rvprop"); got != "ids|content" {
+		if got := r.FormValue("rvprop"); got != "ids|content" {
 			t.Errorf("rvprop = %q, want ids|content", got)
 		}
 		_, _ = io.WriteString(w, body)
 	}))
 	defer srv.Close()
 
-	got, err := testClient(srv).FetchPage("Water Pump")
+	got, err := testClient(srv).FetchPages([]string{"User:Water Pump"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := FetchedPage{Title: "Water Pump", Text: "hello\n", RevID: 99, PageID: 5, NS: 2, Exists: true}
-	if got != want {
-		t.Errorf("FetchPage = %+v, want %+v", got, want)
+	want := FetchedPage{Title: "User:Water Pump", Text: "hello\n", RevID: 99, PageID: 5, NS: 2, Exists: true}
+	if got["User:Water Pump"] != want {
+		t.Errorf("FetchPages = %+v, want %+v", got, want)
 	}
 }
 
-func TestFetchPageMissing(t *testing.T) {
-	const body = `{"query":{"pages":[{"title":"Ghost","missing":true}]}}`
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, body)
+func TestCurrentRevIDAsksForTheIDOnly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("rvprop"); got != "ids" {
+			t.Errorf("rvprop = %q, want ids", got)
+		}
+		if r.URL.Query().Get("titles") == "Ghost" {
+			_, _ = io.WriteString(w, `{"query":{"pages":[{"title":"Ghost","missing":true}]}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"query":{"pages":[{"pageid":5,"title":"A","revisions":[{"revid":99}]}]}}`)
 	}))
 	defer srv.Close()
+	c := testClient(srv)
 
-	got, err := testClient(srv).FetchPage("Ghost")
-	if err != nil {
-		t.Fatal(err)
+	if rev, exists, err := c.CurrentRevID("A"); rev != 99 || !exists || err != nil {
+		t.Errorf("CurrentRevID(A) = (%d, %v, %v), want (99, true, nil)", rev, exists, err)
 	}
-	if got.Exists || got.RevID != 0 || got.PageID != 0 || got.Text != "" {
-		t.Errorf("FetchPage = %+v, want missing", got)
+	if rev, exists, err := c.CurrentRevID("Ghost"); rev != 0 || exists || err != nil {
+		t.Errorf("CurrentRevID(Ghost) = (%d, %v, %v), want (0, false, nil)", rev, exists, err)
 	}
 }
 
@@ -149,13 +155,13 @@ func TestEditSuccessWithoutRevisionIsAnError(t *testing.T) {
 	}
 }
 
-func TestFetchPageReportsAPIError(t *testing.T) {
+func TestCallReportsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, `{"error":{"code":"readapidenied","info":"You need read permission."}}`)
 	}))
 	defer srv.Close()
 
-	_, err := testClient(srv).FetchPage("A")
+	_, _, err := testClient(srv).CurrentRevID("A")
 	if err == nil || !strings.Contains(err.Error(), "readapidenied") {
 		t.Fatalf("err = %v, want the API's error code", err)
 	}
@@ -172,9 +178,9 @@ func TestCallsReportHTTPStatus(t *testing.T) {
 	c := testClient(srv)
 
 	calls := map[string]func() error{
-		"Login":     func() error { return c.Login("u", "p") },
-		"Edit":      func() error { _, err := c.Edit("A", "x", "s", 1); return err },
-		"FetchPage": func() error { _, err := c.FetchPage("A"); return err },
+		"Login":        func() error { return c.Login("u", "p") },
+		"Edit":         func() error { _, err := c.Edit("A", "x", "s", 1); return err },
+		"CurrentRevID": func() error { _, _, err := c.CurrentRevID("A"); return err },
 		"FetchPages": func() error {
 			_, err := c.FetchPages([]string{"A"})
 			return err

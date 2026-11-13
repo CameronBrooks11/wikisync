@@ -136,49 +136,29 @@ type revisionsResponse struct {
 	} `json:"query"`
 }
 
-// FetchPage returns a page's current wikitext and the revision it came from.
-// Content and revision id come from the same response, so a baseline's revid
-// always matches its saved text. Missing pages come back with Exists == false.
-func (c *Client) FetchPage(title string) (FetchedPage, error) {
+// CurrentRevID returns a page's current remote revision id, for conflict
+// checks. It asks for the id alone, not the page text.
+func (c *Client) CurrentRevID(title string) (revid int64, exists bool, err error) {
 	var parsed revisionsResponse
 	if err := c.call(http.MethodGet, url.Values{
-		"action":  {"query"},
-		"prop":    {"revisions"},
-		"titles":  {title},
-		"rvprop":  {"ids|content"},
-		"rvslots": {"main"},
-		"rvlimit": {"1"},
+		"action": {"query"},
+		"prop":   {"revisions"},
+		"titles": {title},
+		"rvprop": {"ids"},
 	}, &parsed); err != nil {
-		return FetchedPage{}, err
+		return 0, false, err
 	}
 	if len(parsed.Query.Pages) == 0 {
-		return FetchedPage{}, fmt.Errorf("no page in response for %q", title)
+		return 0, false, fmt.Errorf("no page in response for %q", title)
 	}
 	page := parsed.Query.Pages[0]
 	if page.Missing {
-		return FetchedPage{Title: page.Title, Exists: false}, nil
+		return 0, false, nil
 	}
 	if len(page.Revisions) == 0 {
-		return FetchedPage{}, fmt.Errorf("page %q has no revisions", title)
+		return 0, false, fmt.Errorf("page %q has no revisions", title)
 	}
-	rev := page.Revisions[0]
-	return FetchedPage{
-		Title:  page.Title,
-		Text:   rev.Slots.Main.Content,
-		RevID:  rev.RevID,
-		PageID: page.PageID,
-		NS:     page.NS,
-		Exists: true,
-	}, nil
-}
-
-// CurrentRevID returns a page's current remote revision id, for conflict checks.
-func (c *Client) CurrentRevID(title string) (revid int64, exists bool, err error) {
-	page, err := c.FetchPage(title)
-	if err != nil {
-		return 0, false, err
-	}
-	return page.RevID, page.Exists, nil
+	return page.Revisions[0].RevID, true, nil
 }
 
 func (c *Client) token(tokenType string) (string, error) {

@@ -7,6 +7,11 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+### Changed
+
+- `push` checks each changed page for a conflict by asking the wiki for its
+  revision id alone; it no longer downloads the page's text to do it. (#46)
+
 ### Fixed
 
 - `push --apply` and `pull --watchlist` report the HTTP status when the wiki
