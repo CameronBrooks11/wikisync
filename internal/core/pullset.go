@@ -11,7 +11,7 @@ import (
 )
 
 // Selection is what a pull covers. Titles named explicitly are always pulled.
-// Pages found through Categories and Prefixes are limited to the wiki's own
+// Pages found through Categories, Prefixes and the Watchlist are limited to the wiki's own
 // language unless AllLanguages is set, and refused if more than Max remain.
 // Categories are followed Depth levels into their subcategories (0: the
 // category's own pages only). With nothing named and no selectors, every
@@ -21,6 +21,7 @@ type Selection struct {
 	Categories   []string
 	Depth        int
 	Prefixes     []string
+	Watchlist    bool
 	AllLanguages bool
 	Max          int
 }
@@ -30,6 +31,7 @@ type Lister interface {
 	ContentLanguage() (string, error)
 	CategoryMembers(category string) (pages []mw.ListedPage, subcats []string, err error)
 	PrefixPages(prefix string) ([]mw.ListedPage, error)
+	WatchlistPages() (pages []mw.ListedPage, missing int, err error)
 }
 
 // BatchFetchFunc fetches many pages at once, keyed by the title as requested.
@@ -41,12 +43,14 @@ type SetReport struct {
 	SkippedLanguage  []string // listed pages in another language (e.g. translations)
 	Refreshed        bool     // nothing was named, so every tracked page was pulled again
 	CategoriesWalked int      // categories listed, subcategories included
+	WatchlistMissing int      // watched titles that have no page
 }
 
 // ErrNothingToPull means no titles or selectors were given and nothing is tracked.
-var ErrNothingToPull = errors.New("nothing to pull: name pages, or use --category or --prefix")
+var ErrNothingToPull = errors.New("nothing to pull: name pages, or use --category, --prefix or --watchlist")
 
-// TooManyError reports a category/prefix selection larger than Selection.Max.
+// TooManyError reports a category, prefix or watchlist selection larger than
+// Selection.Max.
 type TooManyError struct {
 	Count, Max int
 }
@@ -124,7 +128,7 @@ func PullSet(sel Selection, list Lister, fetch BatchFetchFunc, root, host, path 
 
 	var selected []string
 	switch {
-	case len(sel.Categories) > 0 || len(sel.Prefixes) > 0:
+	case len(sel.Categories) > 0 || len(sel.Prefixes) > 0 || sel.Watchlist:
 		lang := ""
 		if !sel.AllLanguages {
 			var err error
@@ -143,6 +147,14 @@ func PullSet(sel Selection, list Lister, fetch BatchFetchFunc, root, host, path 
 				return nil, fmt.Errorf("prefix %q: %w", p, err)
 			}
 			listed = append(listed, pages...)
+		}
+		if sel.Watchlist {
+			pages, missing, err := list.WatchlistPages()
+			if err != nil {
+				return nil, fmt.Errorf("watchlist: %w", err)
+			}
+			listed = append(listed, pages...)
+			rep.WatchlistMissing = missing
 		}
 		for _, p := range listed {
 			if seen[titleKey(p.Title)] {

@@ -20,7 +20,8 @@ live in `.wikisync/baselines/<pageid>.wiki`; the manifest is schema v2.
 
 `pull` selects pages through `core.PullSet`: explicit titles, `--category`
 (walked `--depth` levels into subcategories, each category listed once),
-`--prefix`, or (with none) every tracked page. Listed pages carry their page
+`--prefix`, `--watchlist` (logs in like `push --apply`; talk pages and
+missing titles left out), or (with none) every tracked page. Listed pages carry their page
 language, so translations are dropped before the `--max` cap and before any text
 is fetched; texts come in batches of 50 (`mw.FetchPages`). Per-page writing,
 dirty-file and collision checks stay in `core.Pull`.

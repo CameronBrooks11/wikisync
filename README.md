@@ -39,8 +39,8 @@ MediaWiki [bot password](docs/credentials.md), never your account password.
 
 ## Status
 
-The `push --apply` round trip runs against a real MediaWiki 1.45 in CI on every
-change, and all four commands have been used against
+The `push --apply` round trip and `pull --watchlist` run against a real
+MediaWiki 1.45 in CI on every change, and all four commands have been used against
 [Appropedia](https://www.appropedia.org). wikisync is 0.x: the command line may
 still change between minor versions; see the [changelog](CHANGELOG.md).
 

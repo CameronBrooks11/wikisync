@@ -4,8 +4,8 @@
 #   scripts/test-wiki.sh up     start and provision it; print shell exports on stdout
 #   scripts/test-wiki.sh down   remove the container
 #
-# Installs MediaWiki on SQLite with a random admin password, creates a bot
-# password and one fixture page, and never touches a real wiki. Progress goes to
+# Installs MediaWiki on SQLite with a random admin password, creates two bot
+# passwords (with and without the watchlist grants) and one fixture page, and never touches a real wiki. Progress goes to
 # stderr, so `eval "$(scripts/test-wiki.sh up)"` sees only the exports.
 set -euo pipefail
 
@@ -28,6 +28,7 @@ up)
 
     admin_pass=$(randhex)
     bot_pass=$(randhex) # a bot password must be exactly 32 characters
+    nogrant_pass=$(randhex)
 
     log "installing MediaWiki on SQLite"
     wexec mkdir -p /var/www/data
@@ -36,12 +37,16 @@ up)
         --server="$server" --scriptpath= \
         --pass="$admin_pass" WikisyncTest Admin >&2
 
-    log "creating a bot password and the fixture page"
+    log "creating bot passwords and the fixture page"
     # Grant "basic" explicitly: Special:BotPasswords always includes it (it
     # carries "read"), but this script grants exactly what it is given.
     # Its success message prints the password, so keep stdout out of the logs.
+    # The second bot password lacks the watchlist grants, for the error case.
     wexec php maintenance/run.php createBotPassword \
-        --appid=wikisync --grants=basic,editpage Admin "$bot_pass" >/dev/null
+        --appid=wikisync --grants=basic,editpage,viewmywatchlist,editmywatchlist \
+        Admin "$bot_pass" >/dev/null
+    wexec php maintenance/run.php createBotPassword \
+        --appid=nogrant --grants=basic Admin "$nogrant_pass" >/dev/null
     printf "%s\n\n%s\n" "'''wikisync integration test'''" \
         "This page is a fixture for the wikisync integration test." |
         docker exec -i "$name" php maintenance/run.php edit \
@@ -74,6 +79,8 @@ up)
     printf 'export WIKISYNC_TEST_PAGE=%s\n' "$page"
     printf 'export WIKISYNC_USERNAME=Admin@wikisync\n'
     printf 'export WIKISYNC_PASSWORD=%s\n' "$bot_pass"
+    printf 'export WIKISYNC_TEST_NOGRANT_USERNAME=Admin@nogrant\n'
+    printf 'export WIKISYNC_TEST_NOGRANT_PASSWORD=%s\n' "$nogrant_pass"
     ;;
 down)
     docker rm -f "$name" >/dev/null 2>&1 || true
