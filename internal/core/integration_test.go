@@ -71,8 +71,12 @@ func TestLivePushRoundTrip(t *testing.T) {
 	}
 	user, pass := c.Username, c.Password
 	dir := t.TempDir()
+	fetchLive := func() (mw.FetchedPage, error) {
+		pages, err := client.FetchPages([]string{page})
+		return pages[page], err
+	}
 
-	original, err := client.FetchPage(page)
+	original, err := fetchLive()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +90,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	// Restore the fixture with a direct API edit (no baseline involved), so it
 	// works even after the conflict step has made our baseline stale.
 	t.Cleanup(func() {
-		cur, err := client.FetchPage(page)
+		cur, err := fetchLive()
 		if err != nil {
 			t.Errorf("restore: fetch failed: %v", err)
 			return
@@ -97,7 +101,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 				return
 			}
 		}
-		after, err := client.FetchPage(page)
+		after, err := fetchLive()
 		if err != nil {
 			t.Errorf("restore: verify fetch failed: %v", err)
 			return
@@ -108,7 +112,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	})
 
 	// --- 1. pull -----------------------------------------------------------
-	rep, err := Pull([]string{page}, client.FetchPage, dir, host, path, false)
+	rep, err := Pull([]string{page}, func(string) (mw.FetchedPage, error) { return fetchLive() }, dir, host, path, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +126,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	// match what the wiki actually stores right now.
 	assertSynced := func(step string) mw.FetchedPage {
 		t.Helper()
-		live, err := client.FetchPage(page)
+		live, err := fetchLive()
 		if err != nil {
 			t.Fatalf("%s: fetch: %v", step, err)
 		}
@@ -212,7 +216,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 			t.Errorf("conflict (apply=%v): results = %+v, want conflict", apply, results)
 		}
 	}
-	afterConflict, err := client.FetchPage(page)
+	afterConflict, err := fetchLive()
 	if err != nil {
 		t.Fatal(err)
 	}
