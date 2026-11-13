@@ -1,4 +1,5 @@
-// Package core holds wikisync's commands: pull, status and diff.
+// Package core holds wikisync's commands: pull (and page selection), status,
+// diff and push, and which wiki a working tree belongs to.
 package core
 
 import (
