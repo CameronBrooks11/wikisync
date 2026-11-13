@@ -7,6 +7,8 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-13
+
 ### Changed
 
 - `push` checks each changed page for a conflict by asking the wiki for its
@@ -137,7 +139,8 @@ semver while wikisync is 0.x. Full notes for each release are on the
   default; `--apply` to publish, experimental in this release), with baseline
   snapshots for offline diffs and revision checks before every push.
 
-[Unreleased]: https://github.com/CameronBrooks11/wikisync/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/wikisync/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/CameronBrooks11/wikisync/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/CameronBrooks11/wikisync/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CameronBrooks11/wikisync/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/CameronBrooks11/wikisync/compare/v0.3.0...v0.3.1
