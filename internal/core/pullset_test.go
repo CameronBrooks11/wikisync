@@ -34,13 +34,20 @@ func (f fakeLister) WatchlistPages() ([]mw.ListedPage, int, error) {
 	return f.watchlist, f.missing, nil
 }
 
+// source is a fake wiki for PullSet: listings from fakeLister, texts from
+// fakeBatch.
+type source struct {
+	fakeLister
+	*fakeBatch
+}
+
 // fakeBatch serves pages from a map and records each call's titles.
 type fakeBatch struct {
 	pages map[string]mw.FetchedPage
 	calls [][]string
 }
 
-func (f *fakeBatch) fetch(titles []string) (map[string]mw.FetchedPage, error) {
+func (f *fakeBatch) FetchPages(titles []string) (map[string]mw.FetchedPage, error) {
 	f.calls = append(f.calls, append([]string(nil), titles...))
 	out := map[string]mw.FetchedPage{}
 	for _, t := range titles {
@@ -95,7 +102,7 @@ func waterWiki() (fakeLister, *fakeBatch) {
 
 func TestPullSetCategorySkipsTranslations(t *testing.T) {
 	list, b := waterWiki()
-	rep, err := PullSet(Selection{Categories: []string{"Water"}, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	rep, err := PullSet(Selection{Categories: []string{"Water"}, Max: 500}, source{list, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +119,7 @@ func TestPullSetCategorySkipsTranslations(t *testing.T) {
 
 func TestPullSetAllLanguages(t *testing.T) {
 	list, b := waterWiki()
-	rep, err := PullSet(Selection{Categories: []string{"Water"}, AllLanguages: true, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	rep, err := PullSet(Selection{Categories: []string{"Water"}, AllLanguages: true, Max: 500}, source{list, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +131,7 @@ func TestPullSetAllLanguages(t *testing.T) {
 // A page named explicitly is pulled whatever its language, and only once.
 func TestPullSetExplicitTitleAlwaysPulled(t *testing.T) {
 	list, b := waterWiki()
-	rep, err := PullSet(Selection{Titles: []string{"Still/es"}, Categories: []string{"Water"}, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	rep, err := PullSet(Selection{Titles: []string{"Still/es"}, Categories: []string{"Water"}, Max: 500}, source{list, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,12 +147,12 @@ func TestPullSetExplicitTitleAlwaysPulled(t *testing.T) {
 // fetched when it is exceeded.
 func TestPullSetMaxCountsAfterLanguageFilter(t *testing.T) {
 	list, b := waterWiki()
-	if _, err := PullSet(Selection{Categories: []string{"Water"}, Max: 2}, list, b.fetch, t.TempDir(), "h", "/w/", false); err != nil {
+	if _, err := PullSet(Selection{Categories: []string{"Water"}, Max: 2}, source{list, b}, t.TempDir(), testWiki, false); err != nil {
 		t.Fatalf("2 English pages under a limit of 2: %v", err)
 	}
 
 	b.calls = nil
-	_, err := PullSet(Selection{Categories: []string{"Water"}, Max: 1}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	_, err := PullSet(Selection{Categories: []string{"Water"}, Max: 1}, source{list, b}, t.TempDir(), testWiki, false)
 	var tooMany *TooManyError
 	if !errors.As(err, &tooMany) || tooMany.Count != 2 || tooMany.Max != 1 {
 		t.Fatalf("err = %v, want TooManyError{2, 1}", err)
@@ -161,7 +168,7 @@ func TestPullSetDeduplicatesUnderscores(t *testing.T) {
 		"Water": {{Title: "Water Pump", Lang: "en"}},
 	}}
 	b := &fakeBatch{pages: map[string]mw.FetchedPage{"Water_Pump": page("Water Pump", "x\n", 1, 1)}}
-	rep, err := PullSet(Selection{Titles: []string{"Water_Pump"}, Prefixes: []string{"Water"}, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	rep, err := PullSet(Selection{Titles: []string{"Water_Pump"}, Prefixes: []string{"Water"}, Max: 500}, source{list, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,12 +183,12 @@ func TestPullSetDeduplicatesUnderscores(t *testing.T) {
 // Nothing named: every tracked page is pulled again.
 func TestPullSetRefreshesTrackedPages(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A", "B"}, fakeFetch(map[string]mw.FetchedPage{
+	mustPull(t, []string{"A", "B"}, map[string]mw.FetchedPage{
 		"A": page("A", "a1\n", 1, 1), "B": page("B", "b1\n", 2, 1),
-	}), dir, false)
+	}, dir, false)
 
 	b := &fakeBatch{pages: map[string]mw.FetchedPage{"A": page("A", "a2\n", 1, 2), "B": page("B", "b2\n", 2, 2)}}
-	rep, err := PullSet(Selection{Max: 500}, fakeLister{}, b.fetch, dir, "h", "/w/", false)
+	rep, err := PullSet(Selection{Max: 500}, source{fakeLister{}, b}, dir, testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +202,7 @@ func TestPullSetRefreshesTrackedPages(t *testing.T) {
 }
 
 func TestPullSetNothingToPull(t *testing.T) {
-	_, err := PullSet(Selection{Max: 500}, fakeLister{}, (&fakeBatch{}).fetch, t.TempDir(), "h", "/w/", false)
+	_, err := PullSet(Selection{Max: 500}, source{fakeLister{}, &fakeBatch{}}, t.TempDir(), testWiki, false)
 	if !errors.Is(err, ErrNothingToPull) {
 		t.Fatalf("err = %v, want ErrNothingToPull", err)
 	}
@@ -203,7 +210,7 @@ func TestPullSetNothingToPull(t *testing.T) {
 
 func TestPullSetSelectorMatchingNothing(t *testing.T) {
 	b := &fakeBatch{}
-	rep, err := PullSet(Selection{Categories: []string{"Empty"}, Max: 500}, fakeLister{lang: "en"}, b.fetch, t.TempDir(), "h", "/w/", false)
+	rep, err := PullSet(Selection{Categories: []string{"Empty"}, Max: 500}, source{fakeLister{lang: "en"}, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +259,7 @@ func TestPullSetDepthFollowsSubcategories(t *testing.T) {
 	}
 	for _, tc := range cases {
 		list, b, listed := labWiki()
-		rep, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: tc.depth, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+		rep, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: tc.depth, Max: 500}, source{list, b}, t.TempDir(), testWiki, false)
 		if err != nil {
 			t.Fatalf("depth %d: %v", tc.depth, err)
 		}
@@ -268,7 +275,7 @@ func TestPullSetDepthFollowsSubcategories(t *testing.T) {
 // One category named twice, in different spellings, is listed once.
 func TestPullSetCategorySpellings(t *testing.T) {
 	list, b, listed := labWiki()
-	_, err := PullSet(Selection{Categories: []string{"Lab", "Category:Lab", "category:Lab"}, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	_, err := PullSet(Selection{Categories: []string{"Lab", "Category:Lab", "category:Lab"}, Max: 500}, source{list, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +288,7 @@ func TestPullSetCategorySpellings(t *testing.T) {
 // left out, and nothing is fetched when it is exceeded.
 func TestPullSetMaxCountsWholeTree(t *testing.T) {
 	list, b, _ := labWiki()
-	_, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: 2, Max: 3}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	_, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: 2, Max: 3}, source{list, b}, t.TempDir(), testWiki, false)
 	var tooMany *TooManyError
 	if !errors.As(err, &tooMany) || tooMany.Count != 4 {
 		t.Fatalf("err = %v, want TooManyError counting 4 pages", err)
@@ -290,7 +297,7 @@ func TestPullSetMaxCountsWholeTree(t *testing.T) {
 		t.Error("fetched pages despite refusing the selection")
 	}
 
-	rep, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: 2, Max: 4}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	rep, err := PullSet(Selection{Categories: []string{"Lab"}, Depth: 2, Max: 4}, source{list, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatalf("4 pages under a limit of 4: %v", err)
 	}
@@ -312,7 +319,7 @@ func TestPullSetWatchlist(t *testing.T) {
 	b.pages["User:Me"] = page("User:Me", "me\n", 5, 1)
 	b.pages["User:Me/es"] = page("User:Me/es", "es\n", 6, 1)
 
-	rep, err := PullSet(Selection{Categories: []string{"Water"}, Watchlist: true, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	rep, err := PullSet(Selection{Categories: []string{"Water"}, Watchlist: true, Max: 500}, source{list, b}, t.TempDir(), testWiki, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +335,7 @@ func TestPullSetWatchlist(t *testing.T) {
 
 	// The watchlist alone is a selection, and counts toward the limit.
 	b.calls = nil
-	_, err = PullSet(Selection{Watchlist: true, Max: 1}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	_, err = PullSet(Selection{Watchlist: true, Max: 1}, source{list, b}, t.TempDir(), testWiki, false)
 	var tooMany *TooManyError
 	if !errors.As(err, &tooMany) || tooMany.Count != 2 {
 		t.Fatalf("err = %v, want TooManyError counting 2 pages", err)

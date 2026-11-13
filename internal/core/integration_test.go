@@ -112,7 +112,11 @@ func TestLivePushRoundTrip(t *testing.T) {
 	})
 
 	// --- 1. pull -----------------------------------------------------------
-	rep, err := Pull([]string{page}, func(string) (mw.FetchedPage, error) { return fetchLive() }, dir, host, path, false)
+	fetched, err := client.FetchPages([]string{page})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Pull([]string{page}, fetched, dir, Wiki{host, path}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

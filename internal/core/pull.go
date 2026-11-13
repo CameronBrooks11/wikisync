@@ -96,25 +96,20 @@ type PullReport struct {
 	Collisions   []Collision
 }
 
-// FetchFunc fetches one page by title. It is injected so Pull is testable
-// without a network.
-type FetchFunc func(title string) (mw.FetchedPage, error)
-
-// Pull fetches each title, writes its wikitext (and a baseline snapshot), and
-// updates the manifest. It refuses to overwrite a local file that has unpulled
-// changes or is untracked unless force is set; a clean tracked file is refreshed.
-func Pull(titles []string, fetch FetchFunc, root, host, path string, force bool) (*PullReport, error) {
+// Pull writes each title's fetched page (pages is keyed by the title as
+// requested; a title it lacks counts as missing) and a baseline snapshot, and
+// records them in the manifest as pulled from wiki. It refuses to overwrite a
+// local file that has unpulled changes or is untracked unless force is set; a
+// clean tracked file is refreshed.
+func Pull(titles []string, pages map[string]mw.FetchedPage, root string, wiki Wiki, force bool) (*PullReport, error) {
 	m, err := store.LoadManifest(root)
 	if err != nil {
 		return nil, err
 	}
 	rep := &PullReport{}
 	for _, title := range titles {
-		page, err := fetch(title)
-		if err != nil {
-			return nil, err
-		}
-		if !page.Exists {
+		page, ok := pages[title]
+		if !ok || !page.Exists {
 			rep.Missing = append(rep.Missing, title)
 			continue
 		}
@@ -149,8 +144,8 @@ func Pull(titles []string, fetch FetchFunc, root, host, path string, force bool)
 			Title:  page.Title,
 			File:   filename,
 			RevID:  page.RevID,
-			Host:   host,
-			Path:   path,
+			Host:   wiki.Host,
+			Path:   wiki.Path,
 			SHA256: store.ContentHash(page.Text),
 			PageID: page.PageID,
 		}

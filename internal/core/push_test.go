@@ -86,7 +86,7 @@ func (w *fakeWiki) RevisionText(revID int64) (string, error) {
 func setupPulled(t *testing.T, wiki *fakeWiki, localText string) string {
 	t.Helper()
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", wiki.text, 1, wiki.rev)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", wiki.text, 1, wiki.rev)}, dir, false)
 	if localText != "" {
 		mustWrite(t, filepath.Join(dir, "A.wiki"), localText)
 	}
