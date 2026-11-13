@@ -1,10 +1,11 @@
 package core
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/pmezard/go-difflib/difflib"
 
@@ -29,53 +30,37 @@ type PageDiff struct {
 }
 
 // Diff compares each tracked page (or the named ones) to its baseline snapshot
-// and returns a unified diff. It is local only and never contacts the wiki.
-func Diff(root string, titles []string) ([]PageDiff, error) {
+// and returns a unified diff; the names root doesn't track come back as
+// untracked. It is local only and never contacts the wiki.
+func Diff(root string, titles []string) (results []PageDiff, untracked []string, err error) {
 	m, err := store.LoadManifest(root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	keys, untracked := m.Select(titles)
 
-	selected := map[string]store.Entry{}
-	if titles == nil {
-		selected = m.Entries
-	} else {
-		for _, t := range titles {
-			if entry, ok := m.Entries[t]; ok {
-				selected[t] = entry
-			}
-		}
-	}
-
-	keys := make([]string, 0, len(selected))
-	for k := range selected {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	results := make([]PageDiff, 0, len(keys))
+	results = make([]PageDiff, 0, len(keys))
 	for _, title := range keys {
-		entry := selected[title]
+		entry := m.Entries[title]
 		if entry.PageID == 0 {
 			results = append(results, PageDiff{Title: title, State: NoBaseline})
 			continue
 		}
 		baseline, ok, err := store.ReadBaseline(root, entry.PageID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !ok {
 			results = append(results, PageDiff{Title: title, State: NoBaseline})
 			continue
 		}
-		dest := filepath.Join(root, filepath.FromSlash(entry.File))
-		if !fileExists(dest) {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(entry.File)))
+		if errors.Is(err, fs.ErrNotExist) {
 			results = append(results, PageDiff{Title: title, State: DiffDeleted})
 			continue
 		}
-		data, err := os.ReadFile(dest)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		local := string(data)
 		if local == baseline {
@@ -90,9 +75,9 @@ func Diff(root string, titles []string) ([]PageDiff, error) {
 			Context:  3,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		results = append(results, PageDiff{Title: title, State: Changed, Text: text})
 	}
-	return results, nil
+	return results, untracked, nil
 }

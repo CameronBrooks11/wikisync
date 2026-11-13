@@ -96,21 +96,13 @@ func wikiErrExit(err error) int {
 	return 1
 }
 
-// reportUntracked names each title push was asked for but has no result for,
-// because it isn't tracked, and reports whether there were any.
-func reportUntracked(titles []string, results []core.PushResult) bool {
-	found := map[string]bool{}
-	for _, r := range results {
-		found[r.Title] = true
+// reportUntracked names each title cmd was asked for that isn't tracked, and
+// reports whether there were any.
+func reportUntracked(cmd string, untracked []string) bool {
+	for _, t := range untracked {
+		fmt.Fprintf(os.Stderr, "%s: %q is not tracked (run 'wikisync pull' first)\n", cmd, t)
 	}
-	missing := false
-	for _, t := range titles {
-		if !found[t] {
-			fmt.Fprintf(os.Stderr, "push: %q is not tracked (run 'wikisync pull' first)\n", t)
-			missing = true
-		}
-	}
-	return missing
+	return len(untracked) > 0
 }
 
 // stringList is a repeatable string flag.
@@ -251,25 +243,12 @@ func cmdDiff(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	var selected []string
-	if titles := fs.Args(); len(titles) > 0 {
-		selected = titles
-	}
-	results, err := core.Diff(*dir, selected)
+	results, untracked, err := core.Diff(*dir, fs.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "wikisync diff: %v\n", err)
 		return 1
 	}
-
-	found := map[string]bool{}
-	for _, d := range results {
-		found[d.Title] = true
-	}
-	for _, t := range selected {
-		if !found[t] {
-			fmt.Fprintf(os.Stderr, "diff: %q is not tracked (run 'wikisync pull' first)\n", t)
-		}
-	}
+	reportUntracked("diff", untracked)
 
 	printed := false
 	for _, d := range results {
@@ -299,18 +278,13 @@ func cmdPush(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	var selected []string
-	if titles := fs.Args(); len(titles) > 0 {
-		selected = titles
-	}
-
 	if *apply && *summary == "" {
 		fmt.Fprintln(os.Stderr, "wikisync push --apply: --summary is required")
 		return 2
 	}
 	wiki, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
 	if errors.Is(err, core.ErrNoHost) { // nothing tracked, so nothing to push
-		if reportUntracked(selected, nil) {
+		if reportUntracked("push", fs.Args()) {
 			return 1
 		}
 		fmt.Println("no local changes to push")
@@ -335,14 +309,14 @@ func cmdPush(args []string) int {
 		}
 	}
 
-	results, err := core.Push(*dir, selected, client, *apply, *summary)
+	results, untracked, err := core.Push(*dir, fs.Args(), client, *apply, *summary)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "wikisync push: %v\n", err)
 		return 1
 	}
 
 	exit := 0
-	if reportUntracked(selected, results) {
+	if reportUntracked("push", untracked) {
 		exit = 1
 	}
 	actionable := false

@@ -95,7 +95,7 @@ func setupPulled(t *testing.T, wiki *fakeWiki, localText string) string {
 
 func mustPush(t *testing.T, dir string, remote Remote, apply bool) []PushResult {
 	t.Helper()
-	results, err := Push(dir, nil, remote, apply, "summary")
+	results, _, err := Push(dir, nil, remote, apply, "summary")
 	if err != nil {
 		t.Fatal(err)
 	}

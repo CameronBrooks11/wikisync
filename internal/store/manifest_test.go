@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -56,5 +57,22 @@ func TestLoadManifestV1WithoutPageID(t *testing.T) {
 	}
 	if got := m.Entries["A"]; got.PageID != 0 || got.SHA256 != "abc" {
 		t.Errorf("entry = %+v", got)
+	}
+}
+
+func TestSelect(t *testing.T) {
+	m := &Manifest{Entries: map[string]Entry{"B": {}, "A": {}, "C": {}}}
+	for _, tc := range []struct {
+		names              []string
+		tracked, untracked []string
+	}{
+		{nil, []string{"A", "B", "C"}, nil},
+		{[]string{}, []string{"A", "B", "C"}, nil},
+		{[]string{"C", "Ghost", "A", "C", "Zed"}, []string{"A", "C"}, []string{"Ghost", "Zed"}},
+	} {
+		tracked, untracked := m.Select(tc.names)
+		if !slices.Equal(tracked, tc.tracked) || !slices.Equal(untracked, tc.untracked) {
+			t.Errorf("Select(%q) = %q, %q; want %q, %q", tc.names, tracked, untracked, tc.tracked, tc.untracked)
+		}
 	}
 }
