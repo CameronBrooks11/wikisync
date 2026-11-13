@@ -5,6 +5,7 @@ package mw
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -56,25 +57,6 @@ func NewClientForAPI(apiURL, userAgent string) *Client {
 	}
 }
 
-func (c *Client) get(params url.Values) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, c.APIURL+"?"+params.Encode(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", c.UserAgent)
-	return c.HTTP.Do(req)
-}
-
-func (c *Client) post(params url.Values) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodPost, c.APIURL, strings.NewReader(params.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", c.UserAgent)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return c.HTTP.Do(req)
-}
-
 // apiError is MediaWiki's error envelope: {"error":{"code":…,"info":…}}.
 type apiError struct {
 	Code string `json:"code"`
@@ -83,15 +65,65 @@ type apiError struct {
 
 func (e *apiError) Error() string { return "mediawiki api error " + e.Code + ": " + e.Info }
 
-// apiResponse mirrors a formatversion=2 query/revisions response.
-type apiResponse struct {
-	Error *apiError `json:"error"`
-	Query struct {
+// call sends one API request as a GET or POST and decodes the response into
+// out. A status other than 200 and MediaWiki's error envelope both come back
+// as errors.
+func (c *Client) call(method string, params url.Values, out any) error {
+	params.Set("format", "json")
+	params.Set("formatversion", "2")
+	var req *http.Request
+	var err error
+	if method == http.MethodPost {
+		req, err = http.NewRequest(method, c.APIURL, strings.NewReader(params.Encode()))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
+	} else {
+		req, err = http.NewRequest(method, c.APIURL+"?"+params.Encode(), nil)
+	}
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", c.UserAgent)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("mediawiki api: %s", resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	var envelope struct {
+		Error *apiError `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != nil {
+		return envelope.Error
+	}
+	return json.Unmarshal(body, out)
+}
+
+// revisionsResponse is a prop=revisions query: page texts, with the title
+// normalisations and continuation a batch request can carry.
+type revisionsResponse struct {
+	Continue map[string]string `json:"continue"`
+	Query    struct {
+		Normalized []struct {
+			From string `json:"from"`
+			To   string `json:"to"`
+		} `json:"normalized"`
 		Pages []struct {
 			PageID    int64  `json:"pageid"`
 			NS        int    `json:"ns"`
 			Title     string `json:"title"`
 			Missing   bool   `json:"missing"`
+			Invalid   bool   `json:"invalid"`
 			Revisions []struct {
 				RevID int64 `json:"revid"`
 				Slots struct {
@@ -108,30 +140,16 @@ type apiResponse struct {
 // Content and revision id come from the same response, so a baseline's revid
 // always matches its saved text. Missing pages come back with Exists == false.
 func (c *Client) FetchPage(title string) (FetchedPage, error) {
-	resp, err := c.get(url.Values{
-		"action":        {"query"},
-		"prop":          {"revisions"},
-		"titles":        {title},
-		"rvprop":        {"ids|content"},
-		"rvslots":       {"main"},
-		"rvlimit":       {"1"},
-		"format":        {"json"},
-		"formatversion": {"2"},
-	})
-	if err != nil {
+	var parsed revisionsResponse
+	if err := c.call(http.MethodGet, url.Values{
+		"action":  {"query"},
+		"prop":    {"revisions"},
+		"titles":  {title},
+		"rvprop":  {"ids|content"},
+		"rvslots": {"main"},
+		"rvlimit": {"1"},
+	}, &parsed); err != nil {
 		return FetchedPage{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return FetchedPage{}, fmt.Errorf("mediawiki api: %s", resp.Status)
-	}
-
-	var parsed apiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return FetchedPage{}, err
-	}
-	if parsed.Error != nil {
-		return FetchedPage{}, parsed.Error
 	}
 	if len(parsed.Query.Pages) == 0 {
 		return FetchedPage{}, fmt.Errorf("no page in response for %q", title)
@@ -164,29 +182,17 @@ func (c *Client) CurrentRevID(title string) (revid int64, exists bool, err error
 }
 
 func (c *Client) token(tokenType string) (string, error) {
-	resp, err := c.get(url.Values{
-		"action":        {"query"},
-		"meta":          {"tokens"},
-		"type":          {tokenType},
-		"format":        {"json"},
-		"formatversion": {"2"},
-	})
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
 	var out struct {
-		Error *apiError `json:"error"`
 		Query struct {
 			Tokens map[string]string `json:"tokens"`
 		} `json:"query"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.call(http.MethodGet, url.Values{
+		"action": {"query"},
+		"meta":   {"tokens"},
+		"type":   {tokenType},
+	}, &out); err != nil {
 		return "", err
-	}
-	if out.Error != nil {
-		return "", out.Error
 	}
 	tok := out.Query.Tokens[tokenType+"token"]
 	if tok == "" {
@@ -202,26 +208,18 @@ func (c *Client) Login(username, password string) error {
 	if err != nil {
 		return err
 	}
-	resp, err := c.post(url.Values{
-		"action":        {"login"},
-		"lgname":        {username},
-		"lgpassword":    {password},
-		"lgtoken":       {loginToken},
-		"format":        {"json"},
-		"formatversion": {"2"},
-	})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
 	var out struct {
 		Login struct {
 			Result string `json:"result"`
 			Reason string `json:"reason"`
 		} `json:"login"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.call(http.MethodPost, url.Values{
+		"action":     {"login"},
+		"lgname":     {username},
+		"lgpassword": {password},
+		"lgtoken":    {loginToken},
+	}, &out); err != nil {
 		return err
 	}
 	if out.Login.Result != "Success" {
@@ -242,40 +240,25 @@ func (c *Client) Edit(title, text, summary string, baseRevID int64) (int64, erro
 		return 0, err
 	}
 	params := url.Values{
-		"action":        {"edit"},
-		"title":         {title},
-		"text":          {text},
-		"summary":       {summary},
-		"token":         {csrf},
-		"bot":           {"1"},
-		"format":        {"json"},
-		"formatversion": {"2"},
+		"action":  {"edit"},
+		"title":   {title},
+		"text":    {text},
+		"summary": {summary},
+		"token":   {csrf},
+		"bot":     {"1"},
 	}
 	if baseRevID > 0 {
 		params.Set("baserevid", strconv.FormatInt(baseRevID, 10))
 	}
-	resp, err := c.post(params)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
 	var out struct {
 		Edit struct {
 			Result   string `json:"result"`
 			NewRevID int64  `json:"newrevid"`
 			NoChange bool   `json:"nochange"`
 		} `json:"edit"`
-		Error *struct {
-			Code string `json:"code"`
-			Info string `json:"info"`
-		} `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.call(http.MethodPost, params, &out); err != nil {
 		return 0, err
-	}
-	if out.Error != nil {
-		return 0, fmt.Errorf("edit error %s: %s", out.Error.Code, out.Error.Info)
 	}
 	if out.Edit.Result != "Success" {
 		return 0, fmt.Errorf("edit not successful: %s", out.Edit.Result)
@@ -291,29 +274,15 @@ func (c *Client) Edit(title, text, summary string, baseRevID int64) (int64, erro
 
 // RevisionText returns the wikitext the wiki stored for one revision.
 func (c *Client) RevisionText(revID int64) (string, error) {
-	resp, err := c.get(url.Values{
-		"action":        {"query"},
-		"prop":          {"revisions"},
-		"revids":        {strconv.FormatInt(revID, 10)},
-		"rvprop":        {"ids|content"},
-		"rvslots":       {"main"},
-		"format":        {"json"},
-		"formatversion": {"2"},
-	})
-	if err != nil {
+	var parsed revisionsResponse
+	if err := c.call(http.MethodGet, url.Values{
+		"action":  {"query"},
+		"prop":    {"revisions"},
+		"revids":  {strconv.FormatInt(revID, 10)},
+		"rvprop":  {"ids|content"},
+		"rvslots": {"main"},
+	}, &parsed); err != nil {
 		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("mediawiki api: %s", resp.Status)
-	}
-
-	var parsed apiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return "", err
-	}
-	if parsed.Error != nil {
-		return "", parsed.Error
 	}
 	for _, page := range parsed.Query.Pages {
 		for _, rev := range page.Revisions {

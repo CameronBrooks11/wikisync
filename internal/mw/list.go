@@ -1,7 +1,6 @@
 package mw
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -29,23 +28,7 @@ func (c *Client) SiteInfo() (Site, error) {
 	if c.site != nil {
 		return *c.site, nil
 	}
-	resp, err := c.get(url.Values{
-		"action":        {"query"},
-		"meta":          {"siteinfo"},
-		"siprop":        {"general|namespaces|namespacealiases"},
-		"format":        {"json"},
-		"formatversion": {"2"},
-	})
-	if err != nil {
-		return Site{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return Site{}, fmt.Errorf("mediawiki api: %s", resp.Status)
-	}
-
 	var out struct {
-		Error *apiError `json:"error"`
 		Query struct {
 			General struct {
 				Lang string `json:"lang"`
@@ -61,11 +44,12 @@ func (c *Client) SiteInfo() (Site, error) {
 			} `json:"namespacealiases"`
 		} `json:"query"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.call(http.MethodGet, url.Values{
+		"action": {"query"},
+		"meta":   {"siteinfo"},
+		"siprop": {"general|namespaces|namespacealiases"},
+	}, &out); err != nil {
 		return Site{}, err
-	}
-	if out.Error != nil {
-		return Site{}, out.Error
 	}
 	site := Site{Lang: out.Query.General.Lang, Namespaces: map[string]int{}}
 	for _, ns := range out.Query.Namespaces {
@@ -185,8 +169,6 @@ func (c *Client) PrefixPages(prefix string) ([]ListedPage, error) {
 func (c *Client) listGenerator(params url.Values) ([]ListedPage, error) {
 	params.Set("action", "query")
 	params.Set("prop", "info")
-	params.Set("format", "json")
-	params.Set("formatversion", "2")
 
 	var pages []ListedPage
 	cont := map[string]string{}
@@ -213,17 +195,7 @@ func (c *Client) listGenerator(params url.Values) ([]ListedPage, error) {
 }
 
 func (c *Client) listOnce(q url.Values) ([]ListedPage, map[string]string, error) {
-	resp, err := c.get(q)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("mediawiki api: %s", resp.Status)
-	}
-
 	var out struct {
-		Error    *apiError         `json:"error"`
 		Continue map[string]string `json:"continue"`
 		Query    struct {
 			Pages []struct {
@@ -234,11 +206,8 @@ func (c *Client) listOnce(q url.Values) ([]ListedPage, map[string]string, error)
 			} `json:"pages"`
 		} `json:"query"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.call(http.MethodGet, q, &out); err != nil {
 		return nil, nil, err
-	}
-	if out.Error != nil {
-		return nil, nil, out.Error
 	}
 	pages := make([]ListedPage, 0, len(out.Query.Pages))
 	for _, p := range out.Query.Pages {
@@ -303,57 +272,19 @@ func (c *Client) fetchBatch(batch []string, result map[string]FetchedPage) error
 // continuation and how many pages gained their text.
 func (c *Client) fetchBatchOnce(batch []string, cont map[string]string, byTitle map[string]FetchedPage, normalized map[string]string) (map[string]string, int, error) {
 	params := url.Values{
-		"action":        {"query"},
-		"prop":          {"revisions"},
-		"titles":        {strings.Join(batch, "|")},
-		"rvprop":        {"ids|content"},
-		"rvslots":       {"main"},
-		"format":        {"json"},
-		"formatversion": {"2"},
+		"action":  {"query"},
+		"prop":    {"revisions"},
+		"titles":  {strings.Join(batch, "|")},
+		"rvprop":  {"ids|content"},
+		"rvslots": {"main"},
 	}
 	for k, v := range cont {
 		params.Set(k, v)
 	}
 	// POST: fifty long titles can exceed a URL length limit.
-	resp, err := c.post(params)
-	if err != nil {
+	var out revisionsResponse
+	if err := c.call(http.MethodPost, params, &out); err != nil {
 		return nil, 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, 0, fmt.Errorf("mediawiki api: %s", resp.Status)
-	}
-
-	var out struct {
-		Error    *apiError         `json:"error"`
-		Continue map[string]string `json:"continue"`
-		Query    struct {
-			Normalized []struct {
-				From string `json:"from"`
-				To   string `json:"to"`
-			} `json:"normalized"`
-			Pages []struct {
-				PageID    int64  `json:"pageid"`
-				NS        int    `json:"ns"`
-				Title     string `json:"title"`
-				Missing   bool   `json:"missing"`
-				Invalid   bool   `json:"invalid"`
-				Revisions []struct {
-					RevID int64 `json:"revid"`
-					Slots struct {
-						Main struct {
-							Content string `json:"content"`
-						} `json:"main"`
-					} `json:"slots"`
-				} `json:"revisions"`
-			} `json:"pages"`
-		} `json:"query"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, 0, err
-	}
-	if out.Error != nil {
-		return nil, 0, out.Error
 	}
 
 	for _, n := range out.Query.Normalized {

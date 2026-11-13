@@ -7,6 +7,14 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+### Fixed
+
+- `push --apply` and `pull --watchlist` report the HTTP status when the wiki
+  answers login or an edit with an error page (e.g. `503 Service
+  Unavailable`), instead of `invalid character '<'`. An edit refused by the
+  wiki now reads `mediawiki api error <code>: <info>`, like every other API
+  error. (#45)
+
 ## [0.5.0] - 2026-11-12
 
 ### Added
