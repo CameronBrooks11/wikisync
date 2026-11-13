@@ -16,7 +16,7 @@ func TestStatusUnchangedAfterPull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].State != Unchanged {
+	if len(items) != 1 || items[0].State != StatusUnchanged {
 		t.Fatalf("items = %+v", items)
 	}
 }
@@ -30,7 +30,7 @@ func TestStatusModified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items[0].State != Modified {
+	if items[0].State != StatusModified {
 		t.Errorf("state = %s", items[0].State)
 	}
 }
@@ -46,7 +46,7 @@ func TestStatusDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items[0].State != Deleted {
+	if items[0].State != StatusDeleted {
 		t.Errorf("state = %s", items[0].State)
 	}
 }

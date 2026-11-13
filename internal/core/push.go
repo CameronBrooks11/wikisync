@@ -12,12 +12,12 @@ import (
 type PushAction string
 
 const (
-	Pushed         PushAction = "pushed"
-	WouldPush      PushAction = "would-push"
-	SkipUnchanged  PushAction = "unchanged"
-	Conflict       PushAction = "conflict"
+	PushPublished  PushAction = "pushed"
+	PushPreviewed  PushAction = "would-push"
+	PushUnchanged  PushAction = "unchanged"
+	PushConflict   PushAction = "conflict"
 	PushError      PushAction = "error"
-	NoBaselinePush PushAction = "baseline-unavailable"
+	PushNoBaseline PushAction = "baseline-unavailable"
 )
 
 // PushResult is one page's push outcome.
@@ -63,7 +63,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 		entry := m.Entries[title]
 
 		if entry.PageID == 0 {
-			results = append(results, PushResult{Title: title, Action: NoBaselinePush, Detail: "no baseline; re-pull"})
+			results = append(results, PushResult{Title: title, Action: PushNoBaseline, Detail: "no baseline; re-pull"})
 			continue
 		}
 		baseline, ok, err := store.ReadBaseline(root, entry.PageID)
@@ -71,7 +71,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 			return nil, nil, err
 		}
 		if !ok {
-			results = append(results, PushResult{Title: title, Action: NoBaselinePush, Detail: "no baseline snapshot; re-pull"})
+			results = append(results, PushResult{Title: title, Action: PushNoBaseline, Detail: "no baseline snapshot; re-pull"})
 			continue
 		}
 
@@ -84,7 +84,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 		}
 		local := string(data)
 		if local == baseline {
-			results = append(results, PushResult{Title: title, Action: SkipUnchanged})
+			results = append(results, PushResult{Title: title, Action: PushUnchanged})
 			continue
 		}
 
@@ -94,20 +94,20 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 			continue
 		}
 		if !exists {
-			results = append(results, PushResult{Title: title, Action: Conflict, Detail: "page no longer exists on the wiki"})
+			results = append(results, PushResult{Title: title, Action: PushConflict, Detail: "page no longer exists on the wiki"})
 			continue
 		}
 		if remoteRev != entry.RevID {
 			results = append(results, PushResult{
 				Title:  title,
-				Action: Conflict,
+				Action: PushConflict,
 				Detail: fmt.Sprintf("remote moved to rev %d (baseline rev %d); re-pull", remoteRev, entry.RevID),
 			})
 			continue
 		}
 
 		if !apply {
-			results = append(results, PushResult{Title: title, Action: WouldPush})
+			results = append(results, PushResult{Title: title, Action: PushPreviewed})
 			continue
 		}
 
@@ -127,7 +127,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 			}
 			results = append(results, PushResult{
 				Title:  title,
-				Action: SkipUnchanged,
+				Action: PushUnchanged,
 				Detail: "the wiki made no change (its saved form already matched)",
 			})
 			continue
@@ -153,7 +153,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 		entry.SHA256 = store.ContentHash(stored)
 		m.Entries[title] = entry
 		changed = true
-		results = append(results, PushResult{Title: title, Action: Pushed, NewRevID: newRev, Detail: detail})
+		results = append(results, PushResult{Title: title, Action: PushPublished, NewRevID: newRev, Detail: detail})
 	}
 
 	if changed {

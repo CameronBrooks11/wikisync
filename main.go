@@ -253,12 +253,12 @@ func cmdDiff(args []string) int {
 	printed := false
 	for _, d := range results {
 		switch d.State {
-		case core.Changed:
+		case core.DiffChanged:
 			fmt.Print(d.Text)
 			printed = true
 		case core.DiffDeleted:
 			fmt.Fprintf(os.Stderr, "%s: local file deleted\n", d.Title)
-		case core.NoBaseline:
+		case core.DiffNoBaseline:
 			fmt.Fprintf(os.Stderr, "%s: no baseline snapshot; re-pull to enable diff\n", d.Title)
 		}
 	}
@@ -322,21 +322,21 @@ func cmdPush(args []string) int {
 	actionable := false
 	for _, r := range results {
 		switch r.Action {
-		case core.Pushed:
+		case core.PushPublished:
 			fmt.Printf("pushed %q (now rev %d)\n", r.Title, r.NewRevID)
 			actionable = true
-		case core.WouldPush:
+		case core.PushPreviewed:
 			fmt.Printf("would push %q\n", r.Title)
 			actionable = true
-		case core.SkipUnchanged:
+		case core.PushUnchanged:
 			// quiet: nothing to do
-		case core.Conflict:
+		case core.PushConflict:
 			fmt.Fprintf(os.Stderr, "conflict %q: %s\n", r.Title, r.Detail)
 			exit = 1
 		case core.PushError:
 			fmt.Fprintf(os.Stderr, "error %q: %s\n", r.Title, r.Detail)
 			exit = 1
-		case core.NoBaselinePush:
+		case core.PushNoBaseline:
 			fmt.Fprintf(os.Stderr, "skipped %q: %s\n", r.Title, r.Detail)
 			exit = 1
 		}

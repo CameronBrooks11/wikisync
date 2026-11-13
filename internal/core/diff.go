@@ -16,13 +16,13 @@ import (
 type DiffState string
 
 const (
-	Changed       DiffState = "changed"
-	DiffUnchanged DiffState = "unchanged"
-	DiffDeleted   DiffState = "deleted"
-	NoBaseline    DiffState = "baseline-unavailable"
+	DiffChanged    DiffState = "changed"
+	DiffUnchanged  DiffState = "unchanged"
+	DiffDeleted    DiffState = "deleted"
+	DiffNoBaseline DiffState = "baseline-unavailable"
 )
 
-// PageDiff is one page's diff result; Text holds the unified diff when Changed.
+// PageDiff is one page's diff result; Text holds the unified diff when DiffChanged.
 type PageDiff struct {
 	Title string
 	State DiffState
@@ -43,7 +43,7 @@ func Diff(root string, titles []string) (results []PageDiff, untracked []string,
 	for _, title := range keys {
 		entry := m.Entries[title]
 		if entry.PageID == 0 {
-			results = append(results, PageDiff{Title: title, State: NoBaseline})
+			results = append(results, PageDiff{Title: title, State: DiffNoBaseline})
 			continue
 		}
 		baseline, ok, err := store.ReadBaseline(root, entry.PageID)
@@ -51,7 +51,7 @@ func Diff(root string, titles []string) (results []PageDiff, untracked []string,
 			return nil, nil, err
 		}
 		if !ok {
-			results = append(results, PageDiff{Title: title, State: NoBaseline})
+			results = append(results, PageDiff{Title: title, State: DiffNoBaseline})
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(entry.File)))
@@ -77,7 +77,7 @@ func Diff(root string, titles []string) (results []PageDiff, untracked []string,
 		if err != nil {
 			return nil, nil, err
 		}
-		results = append(results, PageDiff{Title: title, State: Changed, Text: text})
+		results = append(results, PageDiff{Title: title, State: DiffChanged, Text: text})
 	}
 	return results, untracked, nil
 }

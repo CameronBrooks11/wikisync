@@ -127,7 +127,7 @@ func assertInSync(t *testing.T, dir string, wiki *fakeWiki) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(items) != 1 || items[0].State != Unchanged {
+	if len(items) != 1 || items[0].State != StatusUnchanged {
 		t.Errorf("status = %+v, want unchanged", items)
 	}
 }
@@ -136,7 +136,7 @@ func TestPushPreviewWouldPush(t *testing.T) {
 	wiki := newFakeWiki("orig", 5)
 	dir := setupPulled(t, wiki, "orig\nnew")
 
-	if r := mustPush(t, dir, wiki, false); r[0].Action != WouldPush {
+	if r := mustPush(t, dir, wiki, false); r[0].Action != PushPreviewed {
 		t.Fatalf("action = %s", r[0].Action)
 	}
 	if len(wiki.edits) != 0 {
@@ -149,7 +149,7 @@ func TestPushPreviewConflict(t *testing.T) {
 	dir := setupPulled(t, wiki, "orig\nnew")
 	wiki.save("orig\nremote change") // the wiki moved past our baseline
 
-	if r := mustPush(t, dir, wiki, false); r[0].Action != Conflict {
+	if r := mustPush(t, dir, wiki, false); r[0].Action != PushConflict {
 		t.Fatalf("action = %s", r[0].Action)
 	}
 }
@@ -158,7 +158,7 @@ func TestPushSkipsUnchanged(t *testing.T) {
 	wiki := newFakeWiki("orig", 5)
 	dir := setupPulled(t, wiki, "")
 
-	if r := mustPush(t, dir, wiki, true); r[0].Action != SkipUnchanged {
+	if r := mustPush(t, dir, wiki, true); r[0].Action != PushUnchanged {
 		t.Fatalf("action = %s", r[0].Action)
 	}
 	if len(wiki.edits) != 0 {
@@ -173,7 +173,7 @@ func TestPushRecordsWhatTheWikiStored(t *testing.T) {
 	dir := setupPulled(t, wiki, "orig\nnew\n")
 
 	r := mustPush(t, dir, wiki, true)
-	if r[0].Action != Pushed || r[0].NewRevID != wiki.rev {
+	if r[0].Action != PushPublished || r[0].NewRevID != wiki.rev {
 		t.Fatalf("result = %+v, wiki rev %d", r[0], wiki.rev)
 	}
 	if wiki.baseRevSeen[0] != 5 {
@@ -182,7 +182,7 @@ func TestPushRecordsWhatTheWikiStored(t *testing.T) {
 	assertInSync(t, dir, wiki)
 
 	// Pushing again is a no-op.
-	if r := mustPush(t, dir, wiki, true); r[0].Action != SkipUnchanged {
+	if r := mustPush(t, dir, wiki, true); r[0].Action != PushUnchanged {
 		t.Errorf("second push action = %s, want unchanged", r[0].Action)
 	}
 	if wiki.created != 1 {
@@ -197,7 +197,7 @@ func TestPushWhitespaceOnlyChangeIsNullEdit(t *testing.T) {
 	dir := setupPulled(t, wiki, "orig\n")
 
 	r := mustPush(t, dir, wiki, true)
-	if r[0].Action == PushError || r[0].Action == Conflict {
+	if r[0].Action == PushError || r[0].Action == PushConflict {
 		t.Fatalf("result = %+v", r[0])
 	}
 	if wiki.created != 0 {
@@ -214,7 +214,7 @@ func TestPushAfterNullEditStillWorks(t *testing.T) {
 	mustPush(t, dir, wiki, true)
 
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "orig\nreal change")
-	if r := mustPush(t, dir, wiki, true); r[0].Action != Pushed {
+	if r := mustPush(t, dir, wiki, true); r[0].Action != PushPublished {
 		t.Fatalf("result = %+v, want pushed", r[0])
 	}
 	assertInSync(t, dir, wiki)
@@ -228,7 +228,7 @@ func TestPushReadBackFailureStillRecordsRevision(t *testing.T) {
 	wiki.readErr = errors.New("network blip")
 
 	r := mustPush(t, dir, wiki, true)
-	if r[0].Action != Pushed || r[0].Detail == "" {
+	if r[0].Action != PushPublished || r[0].Detail == "" {
 		t.Fatalf("result = %+v, want pushed with a warning", r[0])
 	}
 	if m, _ := store.LoadManifest(dir); m.Entries["A"].RevID != wiki.rev {
@@ -237,7 +237,7 @@ func TestPushReadBackFailureStillRecordsRevision(t *testing.T) {
 
 	wiki.readErr = nil
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "orig\nnew\nmore")
-	if r := mustPush(t, dir, wiki, true); r[0].Action != Pushed {
+	if r := mustPush(t, dir, wiki, true); r[0].Action != PushPublished {
 		t.Errorf("next push = %+v, want pushed (no false conflict)", r[0])
 	}
 }
@@ -247,7 +247,7 @@ func TestPushApplyConflictDoesNotEdit(t *testing.T) {
 	dir := setupPulled(t, wiki, "orig\nnew")
 	wiki.save("orig\nremote change")
 
-	if r := mustPush(t, dir, wiki, true); r[0].Action != Conflict {
+	if r := mustPush(t, dir, wiki, true); r[0].Action != PushConflict {
 		t.Fatalf("action = %s", r[0].Action)
 	}
 	if len(wiki.edits) != 0 {
