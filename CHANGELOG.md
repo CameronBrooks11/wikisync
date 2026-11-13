@@ -7,6 +7,8 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-12
+
 ### Added
 
 - `pull --depth N` follows `--category` into subcategories, N levels down.
@@ -105,7 +107,8 @@ semver while wikisync is 0.x. Full notes for each release are on the
   default; `--apply` to publish, experimental in this release), with baseline
   snapshots for offline diffs and revision checks before every push.
 
-[Unreleased]: https://github.com/CameronBrooks11/wikisync/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/CameronBrooks11/wikisync/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/CameronBrooks11/wikisync/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/CameronBrooks11/wikisync/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/CameronBrooks11/wikisync/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/CameronBrooks11/wikisync/compare/v0.2.0...v0.2.1
