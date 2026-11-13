@@ -12,7 +12,7 @@ import (
 
 func TestDiffUnchanged(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "hello\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "hello\n", 1, 1)}, dir, false)
 
 	res, err := Diff(dir, nil)
 	if err != nil {
@@ -25,7 +25,7 @@ func TestDiffUnchanged(t *testing.T) {
 
 func TestDiffChanged(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "line1\nline2\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "line1\nline2\n", 1, 1)}, dir, false)
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "line1\nCHANGED\n")
 
 	res, err := Diff(dir, nil)
@@ -42,7 +42,7 @@ func TestDiffChanged(t *testing.T) {
 
 func TestDiffDeleted(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "x\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "x\n", 1, 1)}, dir, false)
 	if err := os.Remove(filepath.Join(dir, "A.wiki")); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestDiffNoBaseline(t *testing.T) {
 func TestDiffFilterByTitle(t *testing.T) {
 	dir := t.TempDir()
 	pages := map[string]mw.FetchedPage{"A": page("A", "a\n", 1, 1), "B": page("B", "b\n", 2, 1)}
-	mustPull(t, []string{"A", "B"}, fakeFetch(pages), dir, false)
+	mustPull(t, []string{"A", "B"}, pages, dir, false)
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "a2\n")
 
 	res, err := Diff(dir, []string{"A"})

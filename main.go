@@ -143,7 +143,7 @@ func cmdPull(args []string) int {
 		fmt.Fprintln(os.Stderr, "wikisync pull: --depth needs --category")
 		return 2
 	}
-	wikiHost, wikiPath, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
+	wiki, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
 	if err != nil {
 		if errors.Is(err, core.ErrNoHost) && fs.NArg() == 0 && len(categories) == 0 && len(prefixes) == 0 && !*watchlist {
 			err = core.ErrNothingToPull
@@ -165,11 +165,11 @@ func cmdPull(args []string) int {
 		AllLanguages: *allLanguages,
 		Max:          *maxPages,
 	}
-	client := newClient(wikiHost, wikiPath, userAgent())
+	client := newClient(wiki.Host, wiki.Path, userAgent())
 	if *watchlist {
-		c, ok := creds.Lookup(wikiHost, os.Getenv)
+		c, ok := creds.Lookup(wiki.Host, os.Getenv)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "wikisync pull --watchlist: set %s to a MediaWiki bot password with the \"View your watchlist\" grant\n", creds.Hint(wikiHost))
+			fmt.Fprintf(os.Stderr, "wikisync pull --watchlist: set %s to a MediaWiki bot password with the \"View your watchlist\" grant\n", creds.Hint(wiki.Host))
 			return 2
 		}
 		fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)
@@ -178,7 +178,7 @@ func cmdPull(args []string) int {
 			return 1
 		}
 	}
-	rep, err := core.PullSet(sel, client, client.FetchPages, *dir, wikiHost, wikiPath, *force)
+	rep, err := core.PullSet(sel, client, *dir, wiki, *force)
 	var tooMany *core.TooManyError
 	switch {
 	case errors.Is(err, core.ErrNothingToPull):
@@ -188,7 +188,7 @@ func cmdPull(args []string) int {
 		fmt.Fprintf(os.Stderr, "wikisync pull: %v\n", err)
 		return 1
 	case err != nil:
-		fmt.Fprintf(os.Stderr, "wikisync pull: %s: %v\n", wikiHost, err)
+		fmt.Fprintf(os.Stderr, "wikisync pull: %s: %v\n", wiki.Host, err)
 		return 1
 	}
 	if *depth > 0 {
@@ -308,7 +308,7 @@ func cmdPush(args []string) int {
 		fmt.Fprintln(os.Stderr, "wikisync push --apply: --summary is required")
 		return 2
 	}
-	wikiHost, wikiPath, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
+	wiki, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
 	if errors.Is(err, core.ErrNoHost) { // nothing tracked, so nothing to push
 		if reportUntracked(selected, nil) {
 			return 1
@@ -320,12 +320,12 @@ func cmdPush(args []string) int {
 		fmt.Fprintf(os.Stderr, "wikisync push: %v\n", err)
 		return wikiErrExit(err)
 	}
-	client := newClient(wikiHost, wikiPath, userAgent())
+	client := newClient(wiki.Host, wiki.Path, userAgent())
 
 	if *apply {
-		c, ok := creds.Lookup(wikiHost, os.Getenv)
+		c, ok := creds.Lookup(wiki.Host, os.Getenv)
 		if !ok {
-			fmt.Fprintf(os.Stderr, "wikisync push --apply: set %s (a MediaWiki bot password)\n", creds.Hint(wikiHost))
+			fmt.Fprintf(os.Stderr, "wikisync push --apply: set %s (a MediaWiki bot password)\n", creds.Hint(wiki.Host))
 			return 2
 		}
 		fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)

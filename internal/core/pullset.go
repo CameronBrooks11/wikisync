@@ -26,16 +26,16 @@ type Selection struct {
 	Max          int
 }
 
-// Lister finds pages for a selection; listed pages carry their page language.
-type Lister interface {
+// Source is the wiki side of a pull: it lists the pages a selection covers,
+// each with its page language, and fetches their text in batches, keyed by
+// the title as requested.
+type Source interface {
 	ContentLanguage() (string, error)
 	CategoryMembers(category string) (pages []mw.ListedPage, subcats []string, err error)
 	PrefixPages(prefix string) ([]mw.ListedPage, error)
 	WatchlistPages() (pages []mw.ListedPage, missing int, err error)
+	FetchPages(titles []string) (map[string]mw.FetchedPage, error)
 }
-
-// BatchFetchFunc fetches many pages at once, keyed by the title as requested.
-type BatchFetchFunc func(titles []string) (map[string]mw.FetchedPage, error)
 
 // SetReport is a PullReport plus what selection left out.
 type SetReport struct {
@@ -77,7 +77,7 @@ func categoryKey(c string) string {
 // subcategory can be reached by several paths, so each is listed once. It
 // returns the pages (possibly with repeats across categories) and how many
 // categories were listed.
-func categoryPages(list Lister, roots []string, depth int) ([]mw.ListedPage, int, error) {
+func categoryPages(src Source, roots []string, depth int) ([]mw.ListedPage, int, error) {
 	visited := map[string]bool{}
 	var level []string
 	for _, c := range roots {
@@ -91,7 +91,7 @@ func categoryPages(list Lister, roots []string, depth int) ([]mw.ListedPage, int
 	for d := 0; len(level) > 0; d++ {
 		var next []string
 		for _, c := range level {
-			ps, subcats, err := list.CategoryMembers(c)
+			ps, subcats, err := src.CategoryMembers(c)
 			if err != nil {
 				return nil, 0, fmt.Errorf("category %q: %w", c, err)
 			}
@@ -114,7 +114,7 @@ func categoryPages(list Lister, roots []string, depth int) ([]mw.ListedPage, int
 
 // PullSet resolves a selection, fetches its pages in batches, and pulls them
 // with Pull, so dirty files, collisions and baselines are handled the same way.
-func PullSet(sel Selection, list Lister, fetch BatchFetchFunc, root, host, path string, force bool) (*SetReport, error) {
+func PullSet(sel Selection, src Source, root string, wiki Wiki, force bool) (*SetReport, error) {
 	rep := &SetReport{}
 
 	var explicit []string
@@ -132,24 +132,24 @@ func PullSet(sel Selection, list Lister, fetch BatchFetchFunc, root, host, path 
 		lang := ""
 		if !sel.AllLanguages {
 			var err error
-			if lang, err = list.ContentLanguage(); err != nil {
+			if lang, err = src.ContentLanguage(); err != nil {
 				return nil, err
 			}
 		}
-		listed, walked, err := categoryPages(list, sel.Categories, sel.Depth)
+		listed, walked, err := categoryPages(src, sel.Categories, sel.Depth)
 		if err != nil {
 			return nil, err
 		}
 		rep.CategoriesWalked = walked
 		for _, p := range sel.Prefixes {
-			pages, err := list.PrefixPages(p)
+			pages, err := src.PrefixPages(p)
 			if err != nil {
 				return nil, fmt.Errorf("prefix %q: %w", p, err)
 			}
 			listed = append(listed, pages...)
 		}
 		if sel.Watchlist {
-			pages, missing, err := list.WatchlistPages()
+			pages, missing, err := src.WatchlistPages()
 			if err != nil {
 				return nil, fmt.Errorf("watchlist: %w", err)
 			}
@@ -192,16 +192,11 @@ func PullSet(sel Selection, list Lister, fetch BatchFetchFunc, root, host, path 
 	if len(titles) == 0 {
 		return rep, nil // the selectors matched nothing
 	}
-	pages, err := fetch(titles)
+	pages, err := src.FetchPages(titles)
 	if err != nil {
 		return nil, err
 	}
-	pr, err := Pull(titles, func(t string) (mw.FetchedPage, error) {
-		if p, ok := pages[t]; ok {
-			return p, nil
-		}
-		return mw.FetchedPage{Title: t, Exists: false}, nil
-	}, root, host, path, force)
+	pr, err := Pull(titles, pages, root, wiki, force)
 	if err != nil {
 		return nil, err
 	}

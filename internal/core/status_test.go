@@ -10,7 +10,7 @@ import (
 
 func TestStatusUnchangedAfterPull(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "hello\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "hello\n", 1, 1)}, dir, false)
 
 	items, err := Status(dir)
 	if err != nil {
@@ -23,7 +23,7 @@ func TestStatusUnchangedAfterPull(t *testing.T) {
 
 func TestStatusModified(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "hello\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "hello\n", 1, 1)}, dir, false)
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "changed\n")
 
 	items, err := Status(dir)
@@ -37,7 +37,7 @@ func TestStatusModified(t *testing.T) {
 
 func TestStatusDeleted(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "x\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "x\n", 1, 1)}, dir, false)
 	if err := os.Remove(filepath.Join(dir, "A.wiki")); err != nil {
 		t.Fatal(err)
 	}

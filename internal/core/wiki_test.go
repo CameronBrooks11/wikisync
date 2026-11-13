@@ -24,25 +24,25 @@ func tree(t *testing.T, wikis ...[2]string) string {
 
 func TestResolveWikiEmptyTreeNeedsHost(t *testing.T) {
 	dir := t.TempDir()
-	if _, _, err := ResolveWiki(dir, "", "", "/w/"); !errors.Is(err, ErrNoHost) {
+	if _, err := ResolveWiki(dir, "", "", "/w/"); !errors.Is(err, ErrNoHost) {
 		t.Fatalf("err = %v, want ErrNoHost", err)
 	}
-	host, path, err := ResolveWiki(dir, "wiki.example.org", "", "/w/")
-	if err != nil || host != "wiki.example.org" || path != "/w/" {
-		t.Errorf("got %q %q %v, want wiki.example.org /w/", host, path, err)
+	w, err := ResolveWiki(dir, "wiki.example.org", "", "/w/")
+	if err != nil || w != (Wiki{"wiki.example.org", "/w/"}) {
+		t.Errorf("got %v %v, want wiki.example.org/w/", w, err)
 	}
-	if _, path, _ := ResolveWiki(dir, "wiki.example.org", "/", "/w/"); path != "/" {
-		t.Errorf("path = %q, want the --path given", path)
+	if w, _ := ResolveWiki(dir, "wiki.example.org", "/", "/w/"); w.Path != "/" {
+		t.Errorf("path = %q, want the --path given", w.Path)
 	}
 }
 
 func TestResolveWikiUsesRecordedWiki(t *testing.T) {
 	dir := tree(t, [2]string{"wiki.example.org", "/mw/"}, [2]string{"wiki.example.org", "/mw/"})
-	host, path, err := ResolveWiki(dir, "", "", "/w/")
-	if err != nil || host != "wiki.example.org" || path != "/mw/" {
-		t.Errorf("got %q %q %v, want the recorded wiki", host, path, err)
+	w, err := ResolveWiki(dir, "", "", "/w/")
+	if err != nil || w != (Wiki{"wiki.example.org", "/mw/"}) {
+		t.Errorf("got %v %v, want the recorded wiki", w, err)
 	}
-	if _, _, err := ResolveWiki(dir, "wiki.example.org", "/mw/", "/w/"); err != nil {
+	if _, err := ResolveWiki(dir, "wiki.example.org", "/mw/", "/w/"); err != nil {
 		t.Errorf("repeating the recorded wiki: %v", err)
 	}
 }
@@ -50,10 +50,10 @@ func TestResolveWikiUsesRecordedWiki(t *testing.T) {
 func TestResolveWikiRefusesAnotherWiki(t *testing.T) {
 	dir := tree(t, [2]string{"wiki.example.org", "/w/"})
 	var mismatch *WikiMismatchError
-	if _, _, err := ResolveWiki(dir, "other.example.org", "", "/w/"); !errors.As(err, &mismatch) {
+	if _, err := ResolveWiki(dir, "other.example.org", "", "/w/"); !errors.As(err, &mismatch) {
 		t.Errorf("other host: err = %v, want WikiMismatchError", err)
 	}
-	if _, _, err := ResolveWiki(dir, "", "/mw/", "/w/"); !errors.As(err, &mismatch) {
+	if _, err := ResolveWiki(dir, "", "/mw/", "/w/"); !errors.As(err, &mismatch) {
 		t.Errorf("other path: err = %v, want WikiMismatchError", err)
 	}
 }
@@ -61,14 +61,14 @@ func TestResolveWikiRefusesAnotherWiki(t *testing.T) {
 // Trees made before 0.3.0 could mix wikis; --host then picks one.
 func TestResolveWikiMixedTree(t *testing.T) {
 	dir := tree(t, [2]string{"a.example.org", "/w/"}, [2]string{"b.example.org", "/w/"})
-	if _, _, err := ResolveWiki(dir, "", "", "/w/"); err == nil {
+	if _, err := ResolveWiki(dir, "", "", "/w/"); err == nil {
 		t.Error("no --host in a mixed tree: want an error")
 	}
-	if host, _, err := ResolveWiki(dir, "b.example.org", "", "/w/"); err != nil || host != "b.example.org" {
-		t.Errorf("got %q %v, want b.example.org", host, err)
+	if w, err := ResolveWiki(dir, "b.example.org", "", "/w/"); err != nil || w.Host != "b.example.org" {
+		t.Errorf("got %v %v, want b.example.org", w, err)
 	}
 	var mismatch *WikiMismatchError
-	if _, _, err := ResolveWiki(dir, "c.example.org", "", "/w/"); !errors.As(err, &mismatch) {
+	if _, err := ResolveWiki(dir, "c.example.org", "", "/w/"); !errors.As(err, &mismatch) {
 		t.Errorf("unknown host: err = %v, want WikiMismatchError", err)
 	}
 }

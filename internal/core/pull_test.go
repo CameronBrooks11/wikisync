@@ -11,17 +11,15 @@ import (
 
 // --- shared test helpers (package core) ---
 
-func fakeFetch(pages map[string]mw.FetchedPage) FetchFunc {
-	return func(title string) (mw.FetchedPage, error) { return pages[title], nil }
-}
+var testWiki = Wiki{Host: "h", Path: "/w/"}
 
 func page(title, text string, pageID, revID int64) mw.FetchedPage {
 	return mw.FetchedPage{Title: title, Text: text, RevID: revID, PageID: pageID, Exists: true}
 }
 
-func mustPull(t *testing.T, titles []string, f FetchFunc, dir string, force bool) *PullReport {
+func mustPull(t *testing.T, titles []string, pages map[string]mw.FetchedPage, dir string, force bool) *PullReport {
 	t.Helper()
-	rep, err := Pull(titles, f, dir, "h", "/w/", force)
+	rep, err := Pull(titles, pages, dir, testWiki, force)
 	if err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
@@ -102,7 +100,7 @@ func TestPullWritesNamespacedPageIntoFolders(t *testing.T) {
 	dir := t.TempDir()
 	p := page("User:CameronBrooks11/wikisync", "hello\n", 7, 1)
 	p.NS = 2
-	rep := mustPull(t, []string{p.Title}, fakeFetch(map[string]mw.FetchedPage{p.Title: p}), dir, false)
+	rep := mustPull(t, []string{p.Title}, map[string]mw.FetchedPage{p.Title: p}, dir, false)
 
 	if len(rep.Written) != 1 || rep.Written[0].File != "User/CameronBrooks11/wikisync.wiki" {
 		t.Fatalf("written = %+v", rep.Written)
@@ -132,7 +130,7 @@ func TestPullKeepsTrackedPagePath(t *testing.T) {
 
 	p := page("User:X", "v2", 3, 2)
 	p.NS = 2
-	rep := mustPull(t, []string{"User:X"}, fakeFetch(map[string]mw.FetchedPage{"User:X": p}), dir, false)
+	rep := mustPull(t, []string{"User:X"}, map[string]mw.FetchedPage{"User:X": p}, dir, false)
 
 	if len(rep.Written) != 1 || rep.Written[0].File != old {
 		t.Fatalf("written = %+v, want the recorded path %q", rep.Written, old)
@@ -153,7 +151,7 @@ func TestPullRefusesLayoutCollision(t *testing.T) {
 	user := page("User:foo", "user ns\n", 2, 1)
 	user.NS = 2
 	rep := mustPull(t, []string{"User/foo", "User:foo"},
-		fakeFetch(map[string]mw.FetchedPage{"User/foo": main, "User:foo": user}), dir, false)
+		map[string]mw.FetchedPage{"User/foo": main, "User:foo": user}, dir, false)
 
 	if len(rep.Written) != 1 || len(rep.Collisions) != 1 || rep.Collisions[0].Owner != "User/foo" {
 		t.Fatalf("rep = %+v", rep)
@@ -166,7 +164,7 @@ func TestPullRefusesLayoutCollision(t *testing.T) {
 func TestPullWritesFilesBaselineAndManifest(t *testing.T) {
 	dir := t.TempDir()
 	rep := mustPull(t, []string{"Water Pump"},
-		fakeFetch(map[string]mw.FetchedPage{"Water Pump": page("Water Pump", "== Build ==\n", 42, 7)}),
+		map[string]mw.FetchedPage{"Water Pump": page("Water Pump", "== Build ==\n", 42, 7)},
 		dir, false)
 
 	if len(rep.Written) != 1 || rep.Written[0].File != "Water_Pump.wiki" {
@@ -193,7 +191,7 @@ func TestPullMissingAndPartial(t *testing.T) {
 		"Real":  page("Real", "x\n", 1, 1),
 		"Ghost": {Title: "Ghost", Exists: false},
 	}
-	rep := mustPull(t, []string{"Real", "Ghost"}, fakeFetch(pages), dir, false)
+	rep := mustPull(t, []string{"Real", "Ghost"}, pages, dir, false)
 	if len(rep.Written) != 1 || rep.Written[0].Title != "Real" {
 		t.Errorf("written = %+v", rep.Written)
 	}
@@ -204,10 +202,10 @@ func TestPullMissingAndPartial(t *testing.T) {
 
 func TestPullRefusesDirty(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "original\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "original\n", 1, 1)}, dir, false)
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "my local edit\n")
 
-	rep := mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "newer\n", 1, 2)}), dir, false)
+	rep := mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "newer\n", 1, 2)}, dir, false)
 	if len(rep.SkippedDirty) != 1 || len(rep.Written) != 0 {
 		t.Fatalf("rep = %+v", rep)
 	}
@@ -218,10 +216,10 @@ func TestPullRefusesDirty(t *testing.T) {
 
 func TestPullForceOverwritesDirty(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "original\n", 1, 1)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "original\n", 1, 1)}, dir, false)
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "my local edit\n")
 
-	rep := mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "newer\n", 1, 2)}), dir, true)
+	rep := mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "newer\n", 1, 2)}, dir, true)
 	if len(rep.Written) != 1 {
 		t.Fatalf("rep = %+v", rep)
 	}
@@ -232,8 +230,8 @@ func TestPullForceOverwritesDirty(t *testing.T) {
 
 func TestPullRefreshesClean(t *testing.T) {
 	dir := t.TempDir()
-	mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "v1\n", 1, 1)}), dir, false)
-	rep := mustPull(t, []string{"A"}, fakeFetch(map[string]mw.FetchedPage{"A": page("A", "v2\n", 1, 2)}), dir, false)
+	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "v1\n", 1, 1)}, dir, false)
+	rep := mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "v2\n", 1, 2)}, dir, false)
 
 	if len(rep.Written) != 1 {
 		t.Fatalf("rep = %+v", rep)
@@ -259,7 +257,7 @@ func TestPullDetectsCollision(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rep := mustPull(t, []string{"Foo"}, fakeFetch(map[string]mw.FetchedPage{"Foo": page("Foo", "x\n", 1, 1)}), dir, false)
+	rep := mustPull(t, []string{"Foo"}, map[string]mw.FetchedPage{"Foo": page("Foo", "x\n", 1, 1)}, dir, false)
 	if len(rep.Collisions) != 1 || rep.Collisions[0].Owner != "Other" {
 		t.Fatalf("collisions = %+v", rep.Collisions)
 	}
