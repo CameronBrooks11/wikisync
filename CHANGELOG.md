@@ -14,6 +14,11 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ### Fixed
 
+- A refused login reads `login failed: Failed (bad password)`, not
+  `login failed: login failed: …`. `pull`'s counts agree with their noun
+  (`walked 1 category`, `skipped 1 page not in the wiki's language`), and
+  watched titles with no page are reported as `skipped N watched titles
+  with no page`. (#56)
 - `push --apply` and `pull --watchlist` report the HTTP status when the wiki
   answers login or an edit with an error page (e.g. `503 Service
   Unavailable`), instead of `invalid character '<'`. An edit refused by the

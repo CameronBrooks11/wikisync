@@ -187,6 +187,14 @@ func capture(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	return code, string(out), string(errOut)
 }
 
+func TestCount(t *testing.T) {
+	for n, want := range map[int]string{0: "0 pages", 1: "1 page", 2: "2 pages"} {
+		if got := count(n, "page", "pages"); got != want {
+			t.Errorf("count(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
 // diff and push name each title they were given that isn't tracked, in the
 // order given, and still report on the tracked ones.
 func TestUntrackedTitlesAreNamed(t *testing.T) {
@@ -263,7 +271,7 @@ func TestPullWatchlistLogsInFirst(t *testing.T) {
 	t.Setenv("WIKISYNC_PASSWORD_EXAMPLE", "secret")
 	code, _, stderr := capture(t, "pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--watchlist")
 	const want = "logging in as Me@wikisync (from WIKISYNC_USERNAME_EXAMPLE)\n" +
-		"wikisync pull: login failed: login failed: Failed (bad password)\n"
+		"wikisync pull: login failed: Failed (bad password)\n"
 	if code != 1 || stderr != want {
 		t.Errorf("got %d %q, want 1 %q", code, stderr, want)
 	}
@@ -340,7 +348,7 @@ func TestPullOutput(t *testing.T) {
 			args:   []string{"pull", "--host", "wiki.example.org", "--dir", dir, "--category", "Top", "--depth", "1"},
 			stdout: `pulled "A" -> A.wiki` + "\n" + `pulled "B" -> B.wiki` + "\n",
 			stderr: "walked 2 categories (depth 1)\n" +
-				"skipped 1 pages in other languages, such as translations (use --all-languages to include them)\n"},
+				"skipped 1 page not in the wiki's language, such as translations (use --all-languages to include them)\n"},
 		{name: "refresh with a local edit", args: []string{"pull", "--dir", dir}, edit: "A.wiki", code: 1,
 			stdout: `pulled "B" -> B.wiki` + "\n",
 			stderr: "pulling the 2 tracked pages again\n" +
@@ -353,7 +361,7 @@ func TestPullOutput(t *testing.T) {
 		{name: "watchlist", args: []string{"pull", "--dir", dir, "--force", "--watchlist"},
 			stdout: `pulled "A" -> A.wiki` + "\n",
 			stderr: "logging in as Me@wikisync (from WIKISYNC_USERNAME_EXAMPLE)\n" +
-				"skipped 1 watched pages that don't exist\n"},
+				"skipped 1 watched title with no page\n"},
 		{name: "empty selection", args: []string{"pull", "--dir", dir, "--category", "Empty"}, code: 1,
 			stderr: "no pages matched\n"},
 	}

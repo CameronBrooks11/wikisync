@@ -124,6 +124,14 @@ func login(client *mw.Client, host, cmd, flag, want string) int {
 	return 0
 }
 
+// count is n followed by the singular or plural noun: "1 page", "2 pages".
+func count(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
 // stringList is a repeatable string flag.
 type stringList []string
 
@@ -204,10 +212,10 @@ func cmdPull(args []string) int {
 // pulled.
 func printPullReport(rep *core.SetReport, depth int) int {
 	if depth > 0 {
-		fmt.Fprintf(os.Stderr, "walked %d categories (depth %d)\n", rep.CategoriesWalked, depth)
+		fmt.Fprintf(os.Stderr, "walked %s (depth %d)\n", count(rep.CategoriesWalked, "category", "categories"), depth)
 	}
 	if rep.Refreshed {
-		fmt.Fprintf(os.Stderr, "pulling the %d tracked pages again\n", rep.Total())
+		fmt.Fprintf(os.Stderr, "pulling the %s again\n", count(rep.Total(), "tracked page", "tracked pages"))
 	}
 	for _, w := range rep.Written {
 		fmt.Printf("pulled %q -> %s\n", w.Title, w.File)
@@ -222,10 +230,10 @@ func printPullReport(rep *core.SetReport, depth int) int {
 		fmt.Fprintf(os.Stderr, "skipped %q: filename %q is already used by %q\n", c.Title, c.File, c.Owner)
 	}
 	if rep.WatchlistMissing > 0 {
-		fmt.Fprintf(os.Stderr, "skipped %d watched pages that don't exist\n", rep.WatchlistMissing)
+		fmt.Fprintf(os.Stderr, "skipped %s with no page\n", count(rep.WatchlistMissing, "watched title", "watched titles"))
 	}
 	if n := len(rep.SkippedLanguage); n > 0 {
-		fmt.Fprintf(os.Stderr, "skipped %d pages in other languages, such as translations (use --all-languages to include them)\n", n)
+		fmt.Fprintf(os.Stderr, "skipped %s not in the wiki's language, such as translations (use --all-languages to include them)\n", count(n, "page", "pages"))
 	}
 	if rep.Total() == 0 {
 		fmt.Fprintln(os.Stderr, "no pages matched")

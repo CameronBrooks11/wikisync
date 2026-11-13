@@ -4,6 +4,7 @@ package mw
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -204,9 +205,9 @@ func (c *Client) Login(username, password string) error {
 	}
 	if out.Login.Result != "Success" {
 		if out.Login.Reason != "" {
-			return fmt.Errorf("login failed: %s (%s)", out.Login.Result, out.Login.Reason)
+			return fmt.Errorf("%s (%s)", out.Login.Result, out.Login.Reason)
 		}
-		return fmt.Errorf("login failed: %s", out.Login.Result)
+		return errors.New(out.Login.Result)
 	}
 	return nil
 }
