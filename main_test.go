@@ -377,3 +377,43 @@ func TestPullOutput(t *testing.T) {
 		}
 	}
 }
+
+// When an edit lands but the wiki's saved text can't be read back, push
+// still reports the new revision, and says the working file holds the text
+// as sent.
+func TestPushWarnsWhenTheSavedTextIsUnreadable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		switch f := r.Form; {
+		case f.Get("meta") == "tokens":
+			_, _ = io.WriteString(w, `{"query":{"tokens":{"logintoken":"t","csrftoken":"t"}}}`)
+		case f.Get("action") == "login":
+			_, _ = io.WriteString(w, `{"login":{"result":"Success"}}`)
+		case f.Get("action") == "edit":
+			_, _ = io.WriteString(w, `{"edit":{"result":"Success","newrevid":2}}`)
+		case f.Get("revids") != "":
+			_, _ = io.WriteString(w, `{"error":{"code":"internal_api_error","info":"Database error"}}`)
+		default: // the conflict check: the page is still at the baseline revision
+			_, _ = io.WriteString(w, `{"query":{"pages":[{"pageid":1,"title":"Page","revisions":[{"revid":1}]}]}}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	orig := newClient
+	newClient = func(_, _, ua string) *mw.Client { return mw.NewClientForAPI(srv.URL+"/api.php", ua) }
+	t.Cleanup(func() { newClient = orig })
+	t.Setenv("WIKISYNC_USERNAME_EXAMPLE", "Me@wikisync")
+	t.Setenv("WIKISYNC_PASSWORD_EXAMPLE", "secret")
+	dir := cleanTree(t)
+	if err := os.WriteFile(dir+"/Page.wiki", []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := capture(t, "push", "--dir", dir, "--apply", "--summary", "s")
+	const wantOut = `pushed "Page" (now rev 2)` + "\n"
+	const wantErr = "logging in as Me@wikisync (from WIKISYNC_USERNAME_EXAMPLE)\n" +
+		`warning "Page": pushed, but could not read back the saved text: ` +
+		"mediawiki api error internal_api_error: Database error\n"
+	if code != 0 || stdout != wantOut || stderr != wantErr {
+		t.Errorf("got %d %q %q\nwant 0 %q %q", code, stdout, stderr, wantOut, wantErr)
+	}
+}
