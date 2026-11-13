@@ -1,7 +1,8 @@
 # Credentials
 
-Only `push --apply` needs credentials. `pull`, `status`, `diff` and the `push`
-preview read public pages and never log in.
+Only `push --apply` and `pull --watchlist` need credentials. The rest of
+`pull`, and `status`, `diff` and the `push` preview, read public pages and never
+log in.
 
 ## Use a bot password, not your login
 
@@ -12,14 +13,16 @@ ordinary edits by your account.
 1. Log in to the wiki and open its `Special:BotPasswords` page
    (for example `https://wiki.example.org/wiki/Special:BotPasswords`).
 2. Enter a name for the bot password, such as `wikisync`, and create it.
-3. Grant **Edit existing pages**. wikisync needs nothing else: it never creates,
-   moves or deletes pages.
+3. Grant **Edit existing pages** for `push --apply`, and **View your watchlist**
+   for `pull --watchlist`. wikisync needs nothing else: it never creates, moves
+   or deletes pages. You can add a grant to an existing bot password later on
+   the same page.
 4. Save. The wiki shows the username to use, `YourName@wikisync`, and a
    password. Copy the password now; it isn't shown again.
 
 ## Set the environment variables
 
-wikisync reads the pair for the wiki you're pushing to:
+wikisync reads the pair for the wiki it's working with:
 
 ```sh
 export WIKISYNC_USERNAME_EXAMPLE='YourName@wikisync'
@@ -41,7 +44,8 @@ username from one and a password from the other is never used. Use the generic
 names for a bare IP address, or for hosts under a two-part suffix such as
 `.co.uk`, where the label rule picks `CO`.
 
-`push --apply` prints which variable it logged in from, never the password.
+`push --apply` and `pull --watchlist` print which variable they logged in from,
+never the password.
 
 ## Keep the password out of files
 

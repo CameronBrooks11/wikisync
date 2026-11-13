@@ -14,6 +14,8 @@ type fakeLister struct {
 	categories map[string][]mw.ListedPage // keyed by name without "Category:"
 	subcats    map[string][]string        // keyed the same way
 	prefixes   map[string][]mw.ListedPage
+	watchlist  []mw.ListedPage
+	missing    int
 	listed     *[]string // categories listed, in order, when non-nil
 }
 
@@ -28,6 +30,9 @@ func (f fakeLister) CategoryMembers(c string) ([]mw.ListedPage, []string, error)
 	return f.categories[name], f.subcats[name], nil
 }
 func (f fakeLister) PrefixPages(p string) ([]mw.ListedPage, error) { return f.prefixes[p], nil }
+func (f fakeLister) WatchlistPages() ([]mw.ListedPage, int, error) {
+	return f.watchlist, f.missing, nil
+}
 
 // fakeBatch serves pages from a map and records each call's titles.
 type fakeBatch struct {
@@ -291,5 +296,44 @@ func TestPullSetMaxCountsWholeTree(t *testing.T) {
 	}
 	if !equal(rep.SkippedLanguage, []string{"Method/es"}) {
 		t.Errorf("skipped = %v", rep.SkippedLanguage)
+	}
+}
+
+// Watched pages join the other selectors: each page is pulled once,
+// translations are left out, and watched titles with no page are counted.
+func TestPullSetWatchlist(t *testing.T) {
+	list, b := waterWiki()
+	list.watchlist = []mw.ListedPage{
+		{Title: "Pump", Lang: "en"},
+		{Title: "User:Me", NS: 2, Lang: "en"},
+		{Title: "User:Me/es", NS: 2, Lang: "es"},
+	}
+	list.missing = 2
+	b.pages["User:Me"] = page("User:Me", "me\n", 5, 1)
+	b.pages["User:Me/es"] = page("User:Me/es", "es\n", 6, 1)
+
+	rep, err := PullSet(Selection{Categories: []string{"Water"}, Watchlist: true, Max: 500}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := written(rep); !equal(got, []string{"Pump", "Still", "User:Me"}) {
+		t.Errorf("written = %v", got)
+	}
+	if !equal(rep.SkippedLanguage, []string{"Pump/ar", "Still/es", "User:Me/es"}) {
+		t.Errorf("skipped = %v", rep.SkippedLanguage)
+	}
+	if rep.WatchlistMissing != 2 {
+		t.Errorf("missing = %d, want 2", rep.WatchlistMissing)
+	}
+
+	// The watchlist alone is a selection, and counts toward the limit.
+	b.calls = nil
+	_, err = PullSet(Selection{Watchlist: true, Max: 1}, list, b.fetch, t.TempDir(), "h", "/w/", false)
+	var tooMany *TooManyError
+	if !errors.As(err, &tooMany) || tooMany.Count != 2 {
+		t.Fatalf("err = %v, want TooManyError counting 2 pages", err)
+	}
+	if len(b.calls) != 0 {
+		t.Error("fetched pages despite refusing the selection")
 	}
 }

@@ -7,6 +7,13 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ## [Unreleased]
 
+### Added
+
+- `pull --watchlist` pulls the pages on your watchlist. It logs in with the
+  same bot password as `push --apply`, which needs the "View your watchlist"
+  grant. Talk pages and watched titles with no page are left out; translations
+  and `--max` are handled as for `--category`. (#22)
+
 ## [0.4.0] - 2026-11-12
 
 ### Added

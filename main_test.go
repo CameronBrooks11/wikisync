@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -83,6 +84,8 @@ func TestRun(t *testing.T) {
 		{"pull --depth below 0", []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--category", "C", "--depth", "-1"}, 2},
 		{"pull --depth needs --category", []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--depth", "1", "Page"}, 2},
 		{"pull --depth with --category", []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--category", "C", "--depth", "1"}, 1}, // the fake wiki has no pages
+		{"pull --watchlist needs credentials", []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--watchlist"}, 2},
+		{"first pull --watchlist needs --host", []string{"pull", "--dir", t.TempDir(), "--watchlist"}, 2},
 		{"status on empty dir", []string{"status", "--dir", t.TempDir()}, 0},
 		{"diff on empty dir", []string{"diff", "--dir", t.TempDir()}, 0},
 		{"push preview, nothing to push", []string{"push", "--dir", t.TempDir()}, 0},
@@ -155,5 +158,40 @@ func TestPushReportsUntrackedTitles(t *testing.T) {
 				t.Errorf("run(%v) = %d, want %d", tc.args, got, tc.want)
 			}
 		})
+	}
+}
+
+// pull --watchlist logs in before listing, and a failed login stops the pull
+// before the watchlist is asked for.
+func TestPullWatchlistLogsInFirst(t *testing.T) {
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		switch {
+		case r.Form.Get("meta") == "tokens":
+			asked = append(asked, "token")
+			_, _ = io.WriteString(w, `{"query":{"tokens":{"logintoken":"t+\\"}}}`)
+		case r.Form.Get("action") == "login":
+			asked = append(asked, "login")
+			_, _ = io.WriteString(w, `{"login":{"result":"Failed","reason":"bad password"}}`)
+		default:
+			asked = append(asked, r.Form.Get("generator"))
+			_, _ = io.WriteString(w, `{"query":{"pages":[]}}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	orig := newClient
+	newClient = func(_, _, ua string) *mw.Client { return mw.NewClientForAPI(srv.URL+"/api.php", ua) }
+	t.Cleanup(func() { newClient = orig })
+	t.Setenv("WIKISYNC_USERNAME_EXAMPLE", "Me@wikisync")
+	t.Setenv("WIKISYNC_PASSWORD_EXAMPLE", "secret")
+	silence(t)
+
+	args := []string{"pull", "--host", "wiki.example.org", "--dir", t.TempDir(), "--watchlist"}
+	if got := run(args); got != 1 {
+		t.Errorf("run(%v) = %d, want 1", args, got)
+	}
+	if fmt.Sprint(asked) != "[token login]" {
+		t.Errorf("requests = %v, want a login token, a login, and nothing after the failure", asked)
 	}
 }

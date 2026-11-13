@@ -2,6 +2,7 @@ package mw
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -91,11 +92,13 @@ func (c *Client) ContentLanguage() (string, error) {
 }
 
 // ListedPage is a page found by a listing, with its page language (which marks
-// translations, e.g. "es" on an English wiki) but not its text.
+// translations, e.g. "es" on an English wiki) but not its text. Missing is set
+// for a listed title with no page, which a watchlist can hold.
 type ListedPage struct {
-	Title string
-	NS    int
-	Lang  string
+	Title   string
+	NS      int
+	Lang    string
+	Missing bool
 }
 
 // categoryNS is MediaWiki's fixed namespace id for categories.
@@ -125,6 +128,34 @@ func (c *Client) CategoryMembers(category string) (pages []ListedPage, subcats [
 		}
 	}
 	return pages, subcats, nil
+}
+
+// WatchlistPages lists the pages on the logged-in user's watchlist, leaving
+// out talk pages (watching a page watches its talk page too) and counting, but
+// not returning, watched titles that have no page. It needs a Login whose bot
+// password has the "View your watchlist" grant.
+func (c *Client) WatchlistPages() (pages []ListedPage, missing int, err error) {
+	watched, err := c.listGenerator(url.Values{
+		"generator": {"watchlistraw"},
+		"gwrlimit":  {"max"},
+	})
+	if err != nil {
+		var apiErr *apiError
+		if errors.As(err, &apiErr) && apiErr.Code == "permissiondenied" {
+			err = fmt.Errorf("%w (the bot password needs the \"View your watchlist\" grant)", err)
+		}
+		return nil, 0, err
+	}
+	for _, p := range watched {
+		switch {
+		case p.NS%2 == 1: // talk namespaces are the odd ones
+		case p.Missing:
+			missing++
+		default:
+			pages = append(pages, p)
+		}
+	}
+	return pages, missing, nil
 }
 
 // PrefixPages lists the pages whose title starts with prefix, e.g.
@@ -199,6 +230,7 @@ func (c *Client) listOnce(q url.Values) ([]ListedPage, map[string]string, error)
 				Title        string `json:"title"`
 				NS           int    `json:"ns"`
 				PageLanguage string `json:"pagelanguage"`
+				Missing      bool   `json:"missing"`
 			} `json:"pages"`
 		} `json:"query"`
 	}
@@ -210,7 +242,7 @@ func (c *Client) listOnce(q url.Values) ([]ListedPage, map[string]string, error)
 	}
 	pages := make([]ListedPage, 0, len(out.Query.Pages))
 	for _, p := range out.Query.Pages {
-		pages = append(pages, ListedPage{Title: p.Title, NS: p.NS, Lang: p.PageLanguage})
+		pages = append(pages, ListedPage{Title: p.Title, NS: p.NS, Lang: p.PageLanguage, Missing: p.Missing})
 	}
 	return pages, out.Continue, nil
 }

@@ -31,14 +31,14 @@ check: fmt-check lint
 test:
     go test -race ./...
 
-[doc("Push round-trip against a throwaway MediaWiki in Docker (what CI runs)")]
+[doc("Push round-trip and watchlist listing against a throwaway MediaWiki in Docker (what CI runs)")]
 test-integration:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'scripts/test-wiki.sh down' EXIT
     exports=$(scripts/test-wiki.sh up) # a failed setup stops here
     eval "$exports"
-    WIKISYNC_REQUIRE_INTEGRATION=1 go test -tags integration -run TestLivePushRoundTrip -count=1 -v ./internal/core/
+    WIKISYNC_REQUIRE_INTEGRATION=1 go test -tags integration -run 'TestLivePushRoundTrip|TestLiveWatchlist' -count=1 -v ./internal/core/ ./internal/mw/
 
 [doc("Push round-trip against a real wiki; needs WIKISYNC_TEST_HOST, WIKISYNC_TEST_PAGE and bot-password credentials (see docs/development.md)")]
 test-live:

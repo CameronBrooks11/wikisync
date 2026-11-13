@@ -59,7 +59,7 @@ func TestCategoryMembersSplitsSubcategories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []ListedPage{{"A/es", 0, "es"}, {"B", 0, "en"}, {"C", 0, "en"}}
+	want := []ListedPage{{Title: "A/es", Lang: "es"}, {Title: "B", Lang: "en"}, {Title: "C", Lang: "en"}}
 	if fmt.Sprint(pages) != fmt.Sprint(want) {
 		t.Errorf("pages = %v, want %v", pages, want)
 	}
@@ -220,5 +220,50 @@ func TestFetchPagesStopsOnStalledContinuation(t *testing.T) {
 	}
 	if requests > 2 {
 		t.Errorf("requests = %d, want it to give up after one fruitless continuation", requests)
+	}
+}
+
+// Talk pages and watched titles with no page are left out; the missing ones
+// are counted.
+func TestWatchlistPagesSkipsTalkAndMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if q := r.URL.Query(); q.Get("generator") != "watchlistraw" || q.Get("prop") != "info" {
+			t.Errorf("query = %v", q)
+		}
+		_, _ = io.WriteString(w, `{"query":{"pages":[`+
+			`{"title":"Water","ns":0,"pagelanguage":"en"},`+
+			`{"title":"Talk:Water","ns":1,"pagelanguage":"en"},`+
+			`{"title":"User:Me","ns":2,"pagelanguage":"en"},`+
+			`{"title":"User talk:Me","ns":3,"missing":true},`+
+			`{"title":"Gone","ns":0,"missing":true},`+
+			`{"title":"Template:T","ns":10,"pagelanguage":"en"}]}}`)
+	}))
+	defer srv.Close()
+
+	pages, missing, err := testClient(srv).WatchlistPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ListedPage{{Title: "Template:T", NS: 10, Lang: "en"}, {Title: "User:Me", NS: 2, Lang: "en"}, {Title: "Water", Lang: "en"}}
+	if fmt.Sprint(pages) != fmt.Sprint(want) || missing != 1 {
+		t.Errorf("pages = %v, missing = %d; want %v, 1", pages, missing, want)
+	}
+}
+
+// A login without the watchlist grant gets a hint naming the grant; other
+// errors pass through as they are.
+func TestWatchlistPagesNamesTheGrant(t *testing.T) {
+	for code, wantHint := range map[string]bool{"permissiondenied": true, "notloggedin": false} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = io.WriteString(w, `{"error":{"code":"`+code+`","info":"no"}}`)
+		}))
+		_, _, err := testClient(srv).WatchlistPages()
+		srv.Close()
+		if err == nil || !strings.Contains(err.Error(), code) {
+			t.Fatalf("%s: err = %v", code, err)
+		}
+		if got := strings.Contains(err.Error(), `"View your watchlist" grant`); got != wantHint {
+			t.Errorf("%s: err = %v, hint shown %v, want %v", code, err, got, wantHint)
+		}
 	}
 }

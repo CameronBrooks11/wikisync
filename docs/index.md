@@ -9,7 +9,7 @@ It works like a small, wiki-specific git:
 
 | Command | Does | Network |
 |---|---|---|
-| `wikisync pull` | Fetch pages (by title, category or prefix) and record what you fetched | read |
+| `wikisync pull` | Fetch pages (by title, category, prefix or your watchlist) and record what you fetched | read |
 | `wikisync status` | List which local files you changed | none |
 | `wikisync diff` | Show your changes as a unified diff | none |
 | `wikisync push` | Preview what would be published; with `--apply`, publish it | read, then write |

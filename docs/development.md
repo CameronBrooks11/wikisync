@@ -32,12 +32,14 @@ just build     # ./bin/wikisync
 | Command | Exercises | Needs |
 |---|---|---|
 | `just test` | All logic, against a fake wiki that behaves like MediaWiki: trailing-whitespace trimming, null edits, stale-revision conflicts | nothing |
-| `just test-integration` | The real push path against a throwaway MediaWiki 1.45 | Docker |
-| `just test-live` | The same round trip against a real wiki | a designated test page and a bot password |
+| `just test-integration` | The real push path and watchlist listing against a throwaway MediaWiki 1.45 | Docker |
+| `just test-live` | The push round trip against a real wiki | a designated test page and a bot password |
 
 CI runs the first two on every pull request. `test-integration` creates its own
-admin account, bot password and fixture page inside the container, so it needs
-no secrets and never touches a real wiki.
+admin account, two bot passwords (with and without the watchlist grants) and a
+fixture page inside the container, so it needs no secrets and never touches a
+real wiki. The watchlist test changes the account's watchlist, so it runs only
+against that container.
 
 `test-live` edits a page and then restores it. Point it only at a page set
 aside for testing, never at real content:

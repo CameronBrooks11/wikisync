@@ -60,7 +60,7 @@ func printUsage() {
 
 Usage:
   wikisync pull   [--host H] [--path P] [--dir D] [--force]
-                  [--category C]... [--depth N] [--prefix P]...
+                  [--category C]... [--depth N] [--prefix P]... [--watchlist]
                   [--all-languages] [--max N]
                   [PAGE ...]          (nothing named: pull every tracked page again)
   wikisync status [--dir D]
@@ -75,7 +75,7 @@ under /w/). After that the directory remembers its wiki, so later pulls and
 pushes there don't need either.
 
 push previews by default; --apply publishes and needs a MediaWiki bot password
-plus --summary. Credentials are read from WIKISYNC_USERNAME_<WIKI> and
+plus --summary. pull --watchlist also logs in with the bot password. Credentials are read from WIKISYNC_USERNAME_<WIKI> and
 WIKISYNC_PASSWORD_<WIKI>, where <WIKI> comes from the host
 (wiki.example.org -> EXAMPLE), else from WIKISYNC_USERNAME and
 WIKISYNC_PASSWORD.
@@ -129,8 +129,9 @@ func cmdPull(args []string) int {
 	fs.Var(&categories, "category", "pull the pages in this category (repeatable)")
 	depth := fs.Int("depth", 0, "with --category, also pull the pages in subcategories this many levels down")
 	fs.Var(&prefixes, "prefix", `pull the pages whose title starts with this, e.g. "User:You/" (repeatable)`)
-	allLanguages := fs.Bool("all-languages", false, "with --category/--prefix, also pull pages in other languages (e.g. translations)")
-	maxPages := fs.Int("max", 500, "refuse a --category/--prefix selection larger than this")
+	watchlist := fs.Bool("watchlist", false, "pull the pages on your watchlist (logs in with your bot password)")
+	allLanguages := fs.Bool("all-languages", false, "with --category/--prefix/--watchlist, also pull pages in other languages (e.g. translations)")
+	maxPages := fs.Int("max", 500, "refuse a --category/--prefix/--watchlist selection larger than this")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -144,7 +145,7 @@ func cmdPull(args []string) int {
 	}
 	wikiHost, wikiPath, err := core.ResolveWiki(*dir, *host, *path, defaultPath)
 	if err != nil {
-		if errors.Is(err, core.ErrNoHost) && fs.NArg() == 0 && len(categories) == 0 && len(prefixes) == 0 {
+		if errors.Is(err, core.ErrNoHost) && fs.NArg() == 0 && len(categories) == 0 && len(prefixes) == 0 && !*watchlist {
 			err = core.ErrNothingToPull
 		}
 		fmt.Fprintf(os.Stderr, "wikisync pull: %v\n", err)
@@ -160,10 +161,23 @@ func cmdPull(args []string) int {
 		Categories:   categories,
 		Depth:        *depth,
 		Prefixes:     prefixes,
+		Watchlist:    *watchlist,
 		AllLanguages: *allLanguages,
 		Max:          *maxPages,
 	}
 	client := newClient(wikiHost, wikiPath, userAgent())
+	if *watchlist {
+		c, ok := creds.Lookup(wikiHost, os.Getenv)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "wikisync pull --watchlist: set %s to a MediaWiki bot password with the \"View your watchlist\" grant\n", creds.Hint(wikiHost))
+			return 2
+		}
+		fmt.Fprintf(os.Stderr, "logging in as %s (from %s)\n", c.Username, c.Source)
+		if err := client.Login(c.Username, c.Password); err != nil {
+			fmt.Fprintf(os.Stderr, "wikisync pull: login failed: %v\n", err)
+			return 1
+		}
+	}
 	rep, err := core.PullSet(sel, client, client.FetchPages, *dir, wikiHost, wikiPath, *force)
 	var tooMany *core.TooManyError
 	switch {
@@ -194,6 +208,9 @@ func cmdPull(args []string) int {
 	}
 	for _, c := range rep.Collisions {
 		fmt.Fprintf(os.Stderr, "skipped %q: filename %q is already used by %q\n", c.Title, c.File, c.Owner)
+	}
+	if rep.WatchlistMissing > 0 {
+		fmt.Fprintf(os.Stderr, "skipped %d watched pages that don't exist\n", rep.WatchlistMissing)
 	}
 	if n := len(rep.SkippedLanguage); n > 0 {
 		fmt.Fprintf(os.Stderr, "skipped %d pages in other languages, such as translations (use --all-languages to include them)\n", n)
