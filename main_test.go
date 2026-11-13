@@ -161,6 +161,56 @@ func TestPushReportsUntrackedTitles(t *testing.T) {
 	}
 }
 
+// capture runs the CLI with stdout and stderr sent to files, and returns the
+// exit code and what each received.
+func capture(t *testing.T, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	dir := t.TempDir()
+	outF, err := os.Create(dir + "/stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	errF, err := os.Create(dir + "/stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	origOut, origErr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = outF, errF
+	code = run(args)
+	os.Stdout, os.Stderr = origOut, origErr
+	_ = outF.Close()
+	_ = errF.Close()
+	out, _ := os.ReadFile(dir + "/stdout")
+	errOut, _ := os.ReadFile(dir + "/stderr")
+	return code, string(out), string(errOut)
+}
+
+// diff and push name each title they were given that isn't tracked, in the
+// order given, and still report on the tracked ones.
+func TestUntrackedTitlesAreNamed(t *testing.T) {
+	fakeWiki(t)
+	const pgae = `"Pgae" is not tracked (run 'wikisync pull' first)` + "\n"
+	const zed = `"Zed" is not tracked (run 'wikisync pull' first)` + "\n"
+	cases := []struct {
+		args           []string
+		code           int
+		stdout, stderr string
+	}{
+		{[]string{"diff", "--dir", cleanTree(t), "Pgae", "Page", "Zed"}, 0,
+			"no local changes\n", "diff: " + pgae + "diff: " + zed},
+		{[]string{"push", "--dir", cleanTree(t), "Pgae", "Page", "Zed"}, 1,
+			"", "push: " + pgae + "push: " + zed},
+		{[]string{"push", "--dir", t.TempDir(), "Pgae"}, 1,
+			"", "push: " + pgae},
+	}
+	for _, tc := range cases {
+		code, stdout, stderr := capture(t, tc.args...)
+		if code != tc.code || stdout != tc.stdout || stderr != tc.stderr {
+			t.Errorf("%v:\n got %d %q %q\nwant %d %q %q", tc.args[:1], code, stdout, stderr, tc.code, tc.stdout, tc.stderr)
+		}
+	}
+}
+
 // pull --watchlist logs in before listing, and a failed login stops the pull
 // before the watchlist is asked for.
 func TestPullWatchlistLogsInFirst(t *testing.T) {

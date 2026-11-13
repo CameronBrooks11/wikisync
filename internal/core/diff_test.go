@@ -14,7 +14,7 @@ func TestDiffUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "hello\n", 1, 1)}, dir, false)
 
-	res, err := Diff(dir, nil)
+	res, _, err := Diff(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestDiffChanged(t *testing.T) {
 	mustPull(t, []string{"A"}, map[string]mw.FetchedPage{"A": page("A", "line1\nline2\n", 1, 1)}, dir, false)
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "line1\nCHANGED\n")
 
-	res, err := Diff(dir, nil)
+	res, _, err := Diff(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestDiffDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := Diff(dir, nil)
+	res, _, err := Diff(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestDiffNoBaseline(t *testing.T) {
 	}
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "x\n")
 
-	res, err := Diff(dir, nil)
+	res, _, err := Diff(dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,11 +81,14 @@ func TestDiffFilterByTitle(t *testing.T) {
 	mustPull(t, []string{"A", "B"}, pages, dir, false)
 	mustWrite(t, filepath.Join(dir, "A.wiki"), "a2\n")
 
-	res, err := Diff(dir, []string{"A"})
+	res, untracked, err := Diff(dir, []string{"A", "Ghost"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(res) != 1 || res[0].Title != "A" {
 		t.Fatalf("res = %+v", res)
+	}
+	if len(untracked) != 1 || untracked[0] != "Ghost" {
+		t.Errorf("untracked = %q, want [Ghost]", untracked)
 	}
 }

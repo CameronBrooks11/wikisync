@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 const (
@@ -62,6 +63,26 @@ func LoadManifest(root string) (*Manifest, error) {
 		m.Entries = map[string]Entry{}
 	}
 	return &m, nil
+}
+
+// Select splits names into the titles m tracks, sorted and without repeats,
+// and those it doesn't, in the order given. No names selects every tracked
+// title.
+func (m *Manifest) Select(names []string) (tracked, untracked []string) {
+	if len(names) == 0 {
+		for t := range m.Entries {
+			tracked = append(tracked, t)
+		}
+	}
+	for _, t := range names {
+		if _, ok := m.Entries[t]; ok {
+			tracked = append(tracked, t)
+		} else {
+			untracked = append(untracked, t)
+		}
+	}
+	slices.Sort(tracked)
+	return slices.Compact(tracked), untracked
 }
 
 // Save writes the manifest atomically (temp file + rename), upgrading the schema.

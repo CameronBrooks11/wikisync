@@ -178,13 +178,9 @@ func PullSet(sel Selection, src Source, root string, wiki Wiki, force bool) (*Se
 		if err != nil {
 			return nil, err
 		}
-		for t := range m.Entries {
-			explicit = append(explicit, t)
-		}
-		if len(explicit) == 0 {
+		if explicit, _ = m.Select(nil); len(explicit) == 0 {
 			return nil, ErrNothingToPull
 		}
-		sort.Strings(explicit)
 		rep.Refreshed = true
 	}
 

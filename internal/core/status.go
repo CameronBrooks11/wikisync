@@ -1,9 +1,10 @@
 package core
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/CameronBrooks11/wikisync/internal/store"
 )
@@ -32,28 +33,25 @@ func Status(root string) ([]StatusItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	items := make([]StatusItem, 0, len(m.Entries))
-	for title, entry := range m.Entries {
-		dest := filepath.Join(root, filepath.FromSlash(entry.File))
+	titles, _ := m.Select(nil)
+	items := make([]StatusItem, 0, len(titles))
+	for _, title := range titles {
+		entry := m.Entries[title]
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(entry.File)))
 		var state State
 		switch {
-		case !fileExists(dest):
+		case errors.Is(err, fs.ErrNotExist):
 			state = Deleted
 		case entry.SHA256 == "":
 			state = BaselineUnknown
+		case err != nil:
+			return nil, err
+		case store.ContentHash(string(data)) == entry.SHA256:
+			state = Unchanged
 		default:
-			data, err := os.ReadFile(dest)
-			if err != nil {
-				return nil, err
-			}
-			if store.ContentHash(string(data)) == entry.SHA256 {
-				state = Unchanged
-			} else {
-				state = Modified
-			}
+			state = Modified
 		}
 		items = append(items, StatusItem{Title: title, File: entry.File, State: state})
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Title < items[j].Title })
 	return items, nil
 }

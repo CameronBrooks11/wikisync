@@ -168,7 +168,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	// checks that the baseline records what the wiki stored, not what we sent.
 	marker := fmt.Sprintf("<!-- wikisync integration test %d -->", stamp)
 	mustWrite(t, file, original.Text+"\n"+marker+"\n")
-	results, err := Push(dir, nil, client, true, "wikisync integration test: edit")
+	results, _, err := Push(dir, nil, client, true, "wikisync integration test: edit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	}
 
 	// --- 3. pushing again is a no-op ----------------------------------------
-	results, err = Push(dir, nil, client, true, "wikisync integration test: should not happen")
+	results, _, err = Push(dir, nil, client, true, "wikisync integration test: should not happen")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 
 	// --- 4. whitespace-only change: the wiki makes no new revision ----------
 	mustWrite(t, file, mustRead(t, file)+"\n")
-	results, err = Push(dir, nil, client, true, "wikisync integration test: trailing newline")
+	results, _, err = Push(dir, nil, client, true, "wikisync integration test: trailing newline")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestLivePushRoundTrip(t *testing.T) {
 	}
 	mustWrite(t, file, mustRead(t, file)+"\n<!-- local edit that must not land -->")
 	for _, apply := range []bool{false, true} {
-		results, err = Push(dir, nil, client, apply, "wikisync integration test: must be refused")
+		results, _, err = Push(dir, nil, client, apply, "wikisync integration test: must be refused")
 		if err != nil {
 			t.Fatal(err)
 		}

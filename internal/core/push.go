@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/CameronBrooks11/wikisync/internal/store"
 )
@@ -48,32 +47,20 @@ type Remote interface {
 //
 // With apply false it previews: every page that would be pushed is reported as
 // would-push, and the wiki is only read, never written.
-func Push(root string, titles []string, remote Remote, apply bool, summary string) ([]PushResult, error) {
+//
+// titles names the pages to push (none: every tracked page); the names root
+// doesn't track come back as untracked.
+func Push(root string, titles []string, remote Remote, apply bool, summary string) (results []PushResult, untracked []string, err error) {
 	m, err := store.LoadManifest(root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	keys, untracked := m.Select(titles)
 
-	selected := m.Entries
-	if titles != nil {
-		selected = map[string]store.Entry{}
-		for _, t := range titles {
-			if entry, ok := m.Entries[t]; ok {
-				selected[t] = entry
-			}
-		}
-	}
-
-	keys := make([]string, 0, len(selected))
-	for k := range selected {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	results := make([]PushResult, 0, len(keys))
+	results = make([]PushResult, 0, len(keys))
 	changed := false
 	for _, title := range keys {
-		entry := selected[title]
+		entry := m.Entries[title]
 
 		if entry.PageID == 0 {
 			results = append(results, PushResult{Title: title, Action: NoBaselinePush, Detail: "no baseline; re-pull"})
@@ -81,7 +68,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 		}
 		baseline, ok, err := store.ReadBaseline(root, entry.PageID)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !ok {
 			results = append(results, PushResult{Title: title, Action: NoBaselinePush, Detail: "no baseline snapshot; re-pull"})
@@ -136,7 +123,7 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 			// was made and the baseline still matches. Reset the working file to
 			// the stored text so status agrees.
 			if err := os.WriteFile(localPath, []byte(baseline), 0o644); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			results = append(results, PushResult{
 				Title:  title,
@@ -157,10 +144,10 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 			detail = "pushed, but could not read back the saved text: " + err.Error()
 		}
 		if err := store.WriteBaseline(root, entry.PageID, stored); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := os.WriteFile(localPath, []byte(stored), 0o644); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		entry.RevID = newRev
 		entry.SHA256 = store.ContentHash(stored)
@@ -171,8 +158,8 @@ func Push(root string, titles []string, remote Remote, apply bool, summary strin
 
 	if changed {
 		if err := m.Save(root); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return results, nil
+	return results, untracked, nil
 }
