@@ -1,5 +1,5 @@
-// Package mw is a small client for the MediaWiki JSON API: reading pages, and
-// (for push) logging in and editing. It uses only the standard library.
+// Package mw is a small client for the MediaWiki JSON API: reading pages and
+// listings, logging in, and editing. It uses only the standard library.
 package mw
 
 import (

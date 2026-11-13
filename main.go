@@ -62,10 +62,11 @@ Usage:
   wikisync pull   [--host H] [--path P] [--dir D] [--force]
                   [--category C]... [--depth N] [--prefix P]... [--watchlist]
                   [--all-languages] [--max N]
-                  [PAGE ...]          (nothing named: pull every tracked page again)
+                  [PAGE ...]   (nothing named: pull every tracked page again)
   wikisync status [--dir D]
   wikisync diff   [--dir D] [PAGE ...]
-  wikisync push   [--host H] [--path P] [--dir D] [--apply] [--summary S] [PAGE ...]
+  wikisync push   [--host H] [--path P] [--dir D] [--apply] [--summary S]
+                  [PAGE ...]
 
 Flags precede page titles, e.g.:
   wikisync pull --host wiki.example.org --dir ./pages "Main Page"
@@ -75,7 +76,8 @@ under /w/). After that the directory remembers its wiki, so later pulls and
 pushes there don't need either.
 
 push previews by default; --apply publishes and needs a MediaWiki bot password
-plus --summary. pull --watchlist also logs in with the bot password. Credentials are read from WIKISYNC_USERNAME_<WIKI> and
+plus --summary. pull --watchlist also logs in with the bot password.
+Credentials are read from WIKISYNC_USERNAME_<WIKI> and
 WIKISYNC_PASSWORD_<WIKI>, where <WIKI> comes from the host
 (wiki.example.org -> EXAMPLE), else from WIKISYNC_USERNAME and
 WIKISYNC_PASSWORD.

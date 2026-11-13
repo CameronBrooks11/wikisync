@@ -7,7 +7,8 @@ wikisync pull   [--host H] [--path P] [--dir D] [--force]
                 [PAGE ...]
 wikisync status [--dir D]
 wikisync diff   [--dir D] [PAGE ...]
-wikisync push   [--host H] [--path P] [--dir D] [--apply] [--summary S] [PAGE ...]
+wikisync push   [--host H] [--path P] [--dir D] [--apply] [--summary S]
+                [PAGE ...]
 wikisync --version
 wikisync --help
 ```
