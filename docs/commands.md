@@ -97,7 +97,9 @@ For each tracked page (or each page you name), `push`:
 never a delete.
 
 Output: `pushed "Title" (now rev N)`, `would push "Title"`, or a `conflict`,
-`error` or `skipped` line on stderr with the reason.
+`error` or `skipped` line on stderr with the reason. If an edit lands but the
+text the wiki saved can't be read back, a `warning` line on stderr says so;
+the baseline then holds the text as sent.
 
 ## Exit codes
 

@@ -14,6 +14,9 @@ semver while wikisync is 0.x. Full notes for each release are on the
 
 ### Fixed
 
+- `push --apply` warns when an edit lands but the text the wiki saved can't
+  be read back; the baseline then holds the text as sent. The warning was
+  computed but never printed. (#58)
 - A refused login reads `login failed: Failed (bad password)`, not
   `login failed: login failed: …`. `pull`'s counts agree with their noun
   (`walked 1 category`, `skipped 1 page not in the wiki's language`), and

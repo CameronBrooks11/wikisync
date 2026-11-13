@@ -345,6 +345,9 @@ func cmdPush(args []string) int {
 		switch r.Action {
 		case core.PushPublished:
 			fmt.Printf("pushed %q (now rev %d)\n", r.Title, r.NewRevID)
+			if r.Detail != "" {
+				fmt.Fprintf(os.Stderr, "warning %q: %s\n", r.Title, r.Detail)
+			}
 			actionable = true
 		case core.PushPreviewed:
 			fmt.Printf("would push %q\n", r.Title)
